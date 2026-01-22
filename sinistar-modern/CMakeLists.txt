@@ -137,11 +137,12 @@ else()
     target_compile_options(Sinistar PRIVATE -Wall -Wextra -pedantic)
 endif()
 
-# Copy assets to build directory
+# Copy assets to build directory (if they exist)
+# Create assets directory first, then copy if files exist
 add_custom_command(TARGET Sinistar POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:Sinistar>/assets
-    COMMENT "Copying assets to build directory"
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:Sinistar>/assets
+    COMMAND ${CMAKE_COMMAND} -E echo "Assets directory created (no assets to copy yet)"
+    COMMENT "Preparing assets directory"
 )
 
 # Installation
