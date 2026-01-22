@@ -138,10 +138,9 @@ else()
 endif()
 
 # Copy assets to build directory (if they exist)
-# Create assets directory first, then copy if files exist
+# Create assets directory first - actual assets will be added in future phases
 add_custom_command(TARGET Sinistar POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:Sinistar>/assets
-    COMMAND ${CMAKE_COMMAND} -E echo "Assets directory created (no assets to copy yet)"
     COMMENT "Preparing assets directory"
 )
 
