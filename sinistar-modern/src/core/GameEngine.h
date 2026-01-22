@@ -13,12 +13,15 @@
 #include <SDL2/SDL.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 class TaskManager;
 class RenderSystem;
 class PhysicsSystem;
 class TextRenderer;
 class Player;
+class Sinibomb;
+class Warrior;
 
 class GameEngine {
 public:
@@ -90,6 +93,31 @@ private:
      */
     void drawHUD();
 
+    /**
+     * Update projectiles
+     */
+    void updateProjectiles(float deltaTime);
+
+    /**
+     * Update enemies
+     */
+    void updateEnemies(float deltaTime);
+
+    /**
+     * Check collisions
+     */
+    void checkCollisions();
+
+    /**
+     * Spawn enemies
+     */
+    void spawnEnemy();
+
+    /**
+     * Clean up dead entities
+     */
+    void cleanupEntities();
+
     // SDL resources
     SDL_Window* window_;
     SDL_Renderer* renderer_;
@@ -102,6 +130,13 @@ private:
 
     // Game entities
     std::unique_ptr<Player> player_;
+    std::vector<Sinibomb*> projectiles_;
+    std::vector<Warrior*> enemies_;
+
+    // Spawning
+    float enemySpawnTimer_;
+    float enemySpawnInterval_;
+    int maxEnemies_;
 
     // Game loop control
     bool running_;

@@ -121,6 +121,12 @@ public:
      */
     bool fire();
 
+    /**
+     * Create a sinibomb projectile
+     * @return Sinibomb projectile (caller takes ownership)
+     */
+    class Sinibomb* createSinibomb();
+
 private:
     // Ship properties
     float rotation_;              // Current rotation in radians

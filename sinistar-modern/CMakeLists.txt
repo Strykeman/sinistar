@@ -49,6 +49,8 @@ set(CORE_SOURCES
 set(ENTITY_SOURCES
     src/entities/GameObject.cpp
     src/entities/Player.cpp
+    src/entities/Sinibomb.cpp
+    src/entities/Warrior.cpp
 )
 
 set(SYSTEM_SOURCES

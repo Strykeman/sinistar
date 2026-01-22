@@ -5,6 +5,7 @@
  */
 
 #include "Player.h"
+#include "Sinibomb.h"
 #include "../input/InputSystem.h"
 #include "../systems/PhysicsSystem.h"
 #include "../graphics/Color.h"
@@ -167,14 +168,27 @@ bool Player::fire() {
         return false;
     }
 
-    // Fire a sinibomb
+    // Decrement ammo and reset cooldown
     bombCount_--;
     timeSinceLastShot_ = 0.0f;
 
-    // TODO: Create sinibomb projectile
+    // Sinibomb is created by GameEngine via createSinibomb()
     // TODO: Play fire sound
 
     return true;
+}
+
+Sinibomb* Player::createSinibomb() {
+    // Create sinibomb in front of ship
+    Vector2 forward = getForward();
+    Vector2 spawnPos = getPosition() + forward * (shipSize_ + 4.0f);
+
+    // Fire velocity = player velocity + forward boost
+    const float SINIBOMB_SPEED = 300.0f;
+    Vector2 bombVel = getVelocity() + forward * SINIBOMB_SPEED;
+
+    // Create and return new sinibomb (caller takes ownership)
+    return new Sinibomb(spawnPos, bombVel, this);
 }
 
 void Player::applyThrust(float deltaTime) {

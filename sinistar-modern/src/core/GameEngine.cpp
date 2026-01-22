@@ -13,10 +13,13 @@
 #include "../graphics/Color.h"
 #include "../entities/GameObject.h"
 #include "../entities/Player.h"
+#include "../entities/Sinibomb.h"
+#include "../entities/Warrior.h"
 #include "../input/InputSystem.h"
 #include <iostream>
 #include <stdexcept>
 #include <cstdio>
+#include <algorithm>
 
 GameEngine::GameEngine(int windowWidth, int windowHeight,
                        int logicalWidth, int logicalHeight)
@@ -25,6 +28,9 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
     , running_(false)
     , logicalWidth_(logicalWidth)
     , logicalHeight_(logicalHeight)
+    , enemySpawnTimer_(0.0f)
+    , enemySpawnInterval_(2.0f)   // Spawn enemy every 2 seconds
+    , maxEnemies_(10)             // Max 10 enemies at once
     , lastFrameTime_(0)
 {
     // Create window
@@ -80,6 +86,16 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
 
 GameEngine::~GameEngine() {
     // Clean up entities
+    for (Sinibomb* proj : projectiles_) {
+        delete proj;
+    }
+    projectiles_.clear();
+
+    for (Warrior* enemy : enemies_) {
+        delete enemy;
+    }
+    enemies_.clear();
+
     player_.reset();
 
     // Clean up systems
@@ -173,7 +189,37 @@ void GameEngine::update(float deltaTime) {
     if (player_) {
         player_->handleInput(deltaTime);
         player_->update(deltaTime);
+
+        // Check if player fired a weapon
+        if (player_->isActive() && InputSystem::getInstance().isButtonPressed(InputButton::FIRE)) {
+            if (player_->canFire()) {
+                Sinibomb* bomb = player_->createSinibomb();
+                if (bomb) {
+                    projectiles_.push_back(bomb);
+                    physicsSystem_->registerObject(bomb);
+                }
+            }
+        }
     }
+
+    // Update projectiles
+    updateProjectiles(deltaTime);
+
+    // Update enemies
+    updateEnemies(deltaTime);
+
+    // Spawn new enemies
+    enemySpawnTimer_ += deltaTime;
+    if (enemySpawnTimer_ >= enemySpawnInterval_ && enemies_.size() < static_cast<size_t>(maxEnemies_)) {
+        spawnEnemy();
+        enemySpawnTimer_ = 0.0f;
+    }
+
+    // Check collisions
+    checkCollisions();
+
+    // Clean up dead entities
+    cleanupEntities();
 
     // Update task manager (will execute all active tasks)
     // This replicates the task execution from the executive loop
@@ -184,11 +230,6 @@ void GameEngine::update(float deltaTime) {
 
     // Update text renderer (timed messages)
     textRenderer_->update(deltaTime);
-
-    // TODO: Add other system updates here:
-    // - Collision detection
-    // - AI
-    // - Audio
 }
 
 void GameEngine::render() {
@@ -203,6 +244,20 @@ void GameEngine::render() {
     SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
     SDL_Rect border = {0, 0, logicalWidth_, logicalHeight_};
     SDL_RenderDrawRect(renderer_, &border);
+
+    // Render projectiles
+    for (Sinibomb* proj : projectiles_) {
+        if (proj && proj->isActive()) {
+            proj->render(renderer_);
+        }
+    }
+
+    // Render enemies
+    for (Warrior* enemy : enemies_) {
+        if (enemy && enemy->isActive()) {
+            enemy->render(renderer_);
+        }
+    }
 
     // Render player
     if (player_ && player_->isActive()) {
@@ -297,4 +352,130 @@ void GameEngine::initPhase3Player() {
     std::cout << "  ESC - Quit" << std::endl;
     std::cout << "  Gamepad also supported!" << std::endl;
     std::cout << std::endl;
+}
+
+void GameEngine::updateProjectiles(float deltaTime) {
+    for (Sinibomb* proj : projectiles_) {
+        if (proj && proj->isActive()) {
+            proj->update(deltaTime);
+        }
+    }
+}
+
+void GameEngine::updateEnemies(float deltaTime) {
+    for (Warrior* enemy : enemies_) {
+        if (enemy && enemy->isActive()) {
+            // Set player as target
+            if (player_ && player_->isActive()) {
+                enemy->setTarget(player_.get());
+            }
+            enemy->update(deltaTime);
+        }
+    }
+}
+
+void GameEngine::checkCollisions() {
+    // Projectile vs Enemy collisions
+    for (Sinibomb* proj : projectiles_) {
+        if (!proj || !proj->isActive()) continue;
+
+        for (Warrior* enemy : enemies_) {
+            if (!enemy || !enemy->isActive()) continue;
+
+            // Circle-circle collision
+            float dist = MathUtils::distance(proj->getPosition(), enemy->getPosition());
+            float collisionDist = proj->getRadius() + enemy->getRadius();
+
+            if (dist < collisionDist) {
+                // Hit!
+                enemy->takeDamage(proj->getDamage());
+                proj->explode();
+                break;
+            }
+        }
+    }
+
+    // Enemy vs Player collisions
+    if (player_ && player_->isActive()) {
+        for (Warrior* enemy : enemies_) {
+            if (!enemy || !enemy->isActive()) continue;
+
+            float dist = MathUtils::distance(player_->getPosition(), enemy->getPosition());
+            float collisionDist = 8.0f + enemy->getRadius();  // Player radius ~8
+
+            if (dist < collisionDist) {
+                // Collision! Damage both
+                enemy->takeDamage(0.5f);
+                player_->takeDamage(0.3f);
+            }
+        }
+    }
+}
+
+void GameEngine::spawnEnemy() {
+    // Random spawn position at edge of screen
+    Vector2 spawnPos;
+    int edge = rand() % 4;
+
+    switch (edge) {
+        case 0: // Top
+            spawnPos.x = static_cast<float>(rand() % logicalWidth_);
+            spawnPos.y = 0.0f;
+            break;
+        case 1: // Right
+            spawnPos.x = static_cast<float>(logicalWidth_);
+            spawnPos.y = static_cast<float>(rand() % logicalHeight_);
+            break;
+        case 2: // Bottom
+            spawnPos.x = static_cast<float>(rand() % logicalWidth_);
+            spawnPos.y = static_cast<float>(logicalHeight_);
+            break;
+        case 3: // Left
+            spawnPos.x = 0.0f;
+            spawnPos.y = static_cast<float>(rand() % logicalHeight_);
+            break;
+    }
+
+    // Random mission type
+    WarriorMission mission = static_cast<WarriorMission>(rand() % static_cast<int>(WarriorMission::MINING));
+
+    // Create enemy
+    Warrior* enemy = new Warrior(mission);
+    enemy->setPosition(spawnPos);
+
+    // Set player as target
+    if (player_) {
+        enemy->setTarget(player_.get());
+    }
+
+    // Register with physics for screen wrapping
+    physicsSystem_->registerObject(enemy);
+
+    enemies_.push_back(enemy);
+}
+
+void GameEngine::cleanupEntities() {
+    // Remove dead projectiles
+    auto projIt = projectiles_.begin();
+    while (projIt != projectiles_.end()) {
+        if ((*projIt)->shouldRemove()) {
+            physicsSystem_->unregisterObject(*projIt);
+            delete *projIt;
+            projIt = projectiles_.erase(projIt);
+        } else {
+            ++projIt;
+        }
+    }
+
+    // Remove dead enemies
+    auto enemyIt = enemies_.begin();
+    while (enemyIt != enemies_.end()) {
+        if ((*enemyIt)->shouldRemove()) {
+            physicsSystem_->unregisterObject(*enemyIt);
+            delete *enemyIt;
+            enemyIt = enemies_.erase(enemyIt);
+        } else {
+            ++enemyIt;
+        }
+    }
 }
