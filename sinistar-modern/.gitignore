@@ -1,0 +1,88 @@
+# Sinistar Modern - Git Ignore File
+
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Binaries
+*.exe
+*.app
+*.out
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+
+# Debug files
+*.dSYM/
+*.pdb
+*.ilk
+*.obj
+*.o
+
+# Package managers
+vcpkg_installed/
+conan/
+
+# Assets (will add specific ones later)
+# Uncomment these when we add extracted ROM assets
+# assets/sprites/*.png
+# assets/sounds/*.wav
+# assets/sounds/*.ogg
+
+# Logs and temp files
+*.log
+*.tmp
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
