@@ -5,24 +5,6 @@
  */
 
 #include "GameObject.h"
-#include <cmath>
-
-// Vector2 methods
-float Vector2::length() const {
-    return std::sqrt(x * x + y * y);
-}
-
-float Vector2::lengthSquared() const {
-    return x * x + y * y;
-}
-
-Vector2 Vector2::normalized() const {
-    float len = length();
-    if (len > 0.0f) {
-        return Vector2(x / len, y / len);
-    }
-    return Vector2(0.0f, 0.0f);
-}
 
 // GameObject methods
 GameObject::GameObject()

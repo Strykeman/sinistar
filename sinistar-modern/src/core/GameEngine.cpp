@@ -6,9 +6,18 @@
 
 #include "GameEngine.h"
 #include "TaskManager.h"
+#include "Math.h"
 #include "../systems/RenderSystem.h"
+#include "../systems/PhysicsSystem.h"
+#include "../graphics/TextRenderer.h"
+#include "../graphics/Color.h"
+#include "../entities/GameObject.h"
 #include <iostream>
 #include <stdexcept>
+#include <vector>
+
+// Test objects for Phase 2
+static std::vector<GameObject*> testObjects;
 
 GameEngine::GameEngine(int windowWidth, int windowHeight,
                        int logicalWidth, int logicalHeight)
@@ -57,12 +66,29 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
     // Initialize game systems
     taskManager_ = std::make_unique<TaskManager>();
     renderSystem_ = std::make_unique<RenderSystem>(renderer_);
+    physicsSystem_ = std::make_unique<PhysicsSystem>(
+        static_cast<float>(logicalWidth_),
+        static_cast<float>(logicalHeight_)
+    );
+    textRenderer_ = std::make_unique<TextRenderer>(renderer_);
+
+    // Initialize Phase 2 test scene
+    initPhase2Test();
 
     std::cout << "Game engine initialized" << std::endl;
+    std::cout << "Phase 2 systems active: Math, Physics, Text Rendering, Color Palette" << std::endl;
 }
 
 GameEngine::~GameEngine() {
+    // Clean up test objects
+    for (GameObject* obj : testObjects) {
+        delete obj;
+    }
+    testObjects.clear();
+
     // Clean up systems
+    textRenderer_.reset();
+    physicsSystem_.reset();
     renderSystem_.reset();
     taskManager_.reset();
 
@@ -147,9 +173,14 @@ void GameEngine::update(float deltaTime) {
     // This replicates the task execution from the executive loop
     taskManager_->update(deltaTime);
 
+    // Update physics system (Phase 2)
+    physicsSystem_->update(deltaTime);
+
+    // Update text renderer (timed messages)
+    textRenderer_->update(deltaTime);
+
     // TODO: Add other system updates here:
     // - Collision detection
-    // - Physics
     // - AI
     // - Audio
 }
@@ -159,25 +190,112 @@ void GameEngine::render() {
     SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
     SDL_RenderClear(renderer_);
 
-    // TODO: Render game objects via render system
+    // Render game objects via render system
     renderSystem_->render();
 
-    // Temporary: Draw a test pattern to verify rendering works
-    // Draw a white border around the screen
+    // Draw white border around the screen
     SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
     SDL_Rect border = {0, 0, logicalWidth_, logicalHeight_};
     SDL_RenderDrawRect(renderer_, &border);
 
-    // Draw test text "SINISTAR" in the center (using simple rectangles)
-    SDL_Rect testRect = {
-        logicalWidth_ / 2 - 32,
-        logicalHeight_ / 2 - 8,
-        64,
-        16
-    };
-    SDL_SetRenderDrawColor(renderer_, 255, 0, 0, 255);
-    SDL_RenderFillRect(renderer_, &testRect);
+    // Phase 2 Test: Render test objects
+    for (GameObject* obj : testObjects) {
+        if (obj && obj->isActive()) {
+            Vector2 pos = obj->getPosition();
+
+            // Draw object as a colored circle (using rectangles)
+            SDL_Rect objRect = {
+                static_cast<int>(pos.x - 2),
+                static_cast<int>(pos.y - 2),
+                4,
+                4
+            };
+
+            // Color based on status (test)
+            uint32_t status = obj->getStatus();
+            Color objColor = ColorPalette::getInstance().getColor(status % 16);
+            SDL_SetRenderDrawColor(renderer_, objColor.r, objColor.g, objColor.b, objColor.a);
+            SDL_RenderFillRect(renderer_, &objRect);
+
+            // Draw velocity vector
+            Vector2 vel = obj->getVelocity();
+            if (vel.lengthSquared() > 0.1f) {
+                SDL_SetRenderDrawColor(renderer_, 0, 255, 0, 128);
+                SDL_RenderDrawLine(renderer_,
+                    static_cast<int>(pos.x),
+                    static_cast<int>(pos.y),
+                    static_cast<int>(pos.x + vel.x * 2.0f),
+                    static_cast<int>(pos.y + vel.y * 2.0f)
+                );
+            }
+        }
+    }
+
+    // Render text (Phase 2 test)
+    textRenderer_->render();
 
     // Present frame
     SDL_RenderPresent(renderer_);
+}
+
+void GameEngine::initPhase2Test() {
+    std::cout << "\n=== Phase 2 Test Initialization ===" << std::endl;
+
+    // Initialize color palette
+    ColorPalette::getInstance().initializeDefaultPalette();
+    std::cout << "Color palette initialized" << std::endl;
+
+    // Create test objects with different velocities and positions
+    for (int i = 0; i < 10; i++) {
+        GameObject* obj = new GameObject();
+
+        // Random-ish position
+        float x = (logicalWidth_ / 11.0f) * (i + 1);
+        float y = logicalHeight_ / 2.0f + (i % 3 - 1) * 30.0f;
+        obj->setPosition(x, y);
+
+        // Random-ish velocity
+        float vx = (i % 5 - 2) * 10.0f;
+        float vy = ((i + 3) % 5 - 2) * 10.0f;
+        obj->setVelocity(vx, vy);
+
+        // Set status for color
+        obj->setStatus(i + 2);  // Use palette colors 2-11
+
+        // Register with physics system
+        physicsSystem_->registerObject(obj);
+
+        testObjects.push_back(obj);
+    }
+    std::cout << "Created " << testObjects.size() << " test objects with physics" << std::endl;
+
+    // Add test messages
+    textRenderer_->showMessage(
+        "SINISTAR - PHASE 2",
+        Vector2(logicalWidth_ / 2.0f, 20.0f),
+        0.0f,  // Permanent
+        Color::WHITE,
+        BitmapFont::Size::LARGE_6x8
+    );
+
+    textRenderer_->showMessage(
+        "MATH + PHYSICS + TEXT RENDERING",
+        Vector2(logicalWidth_ / 2.0f, 32.0f),
+        0.0f,
+        Color::CYAN,
+        BitmapFont::Size::SMALL_3x5
+    );
+
+    textRenderer_->showMessage(
+        "SCREEN WRAPPING ACTIVE",
+        Vector2(logicalWidth_ / 2.0f, logicalHeight_ - 20.0f),
+        0.0f,
+        Color::YELLOW,
+        BitmapFont::Size::SMALL_3x5
+    );
+
+    std::cout << "Test messages added" << std::endl;
+    std::cout << "=== Phase 2 Test Ready ===" << std::endl;
+    std::cout << "Watch objects move and wrap around screen!" << std::endl;
+    std::cout << "Press ESC to quit\n" << std::endl;
 }

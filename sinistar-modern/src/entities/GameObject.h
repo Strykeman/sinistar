@@ -10,33 +10,7 @@
 #define GAMEOBJECT_H
 
 #include <cstdint>
-
-/**
- * Vector2 - simple 2D vector for position and velocity
- */
-struct Vector2 {
-    float x;
-    float y;
-
-    Vector2() : x(0.0f), y(0.0f) {}
-    Vector2(float x_, float y_) : x(x_), y(y_) {}
-
-    Vector2 operator+(const Vector2& other) const {
-        return Vector2(x + other.x, y + other.y);
-    }
-
-    Vector2 operator-(const Vector2& other) const {
-        return Vector2(x - other.x, y - other.y);
-    }
-
-    Vector2 operator*(float scalar) const {
-        return Vector2(x * scalar, y * scalar);
-    }
-
-    float length() const;
-    float lengthSquared() const;
-    Vector2 normalized() const;
-};
+#include "../core/Math.h"
 
 /**
  * GameObject - base class for all game entities

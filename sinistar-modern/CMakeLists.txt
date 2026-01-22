@@ -43,6 +43,7 @@ set(CORE_SOURCES
     src/core/GameEngine.cpp
     src/core/TaskManager.cpp
     src/core/Timer.cpp
+    src/core/Math.cpp
 )
 
 set(ENTITY_SOURCES
@@ -51,6 +52,12 @@ set(ENTITY_SOURCES
 
 set(SYSTEM_SOURCES
     src/systems/RenderSystem.cpp
+    src/systems/PhysicsSystem.cpp
+)
+
+set(GRAPHICS_SOURCES
+    src/graphics/Color.cpp
+    src/graphics/TextRenderer.cpp
 )
 
 set(MAIN_SOURCE
@@ -63,6 +70,7 @@ set(ALL_SOURCES
     ${CORE_SOURCES}
     ${ENTITY_SOURCES}
     ${SYSTEM_SOURCES}
+    ${GRAPHICS_SOURCES}
 )
 
 # Header files (for IDE)

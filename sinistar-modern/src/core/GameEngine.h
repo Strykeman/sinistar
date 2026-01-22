@@ -16,6 +16,8 @@
 
 class TaskManager;
 class RenderSystem;
+class PhysicsSystem;
+class TextRenderer;
 
 class GameEngine {
 public:
@@ -62,6 +64,11 @@ public:
 
 private:
     /**
+     * Initialize Phase 2 test scene
+     */
+    void initPhase2Test();
+
+    /**
      * Process SDL events (input, window events)
      */
     void handleEvents();
@@ -84,6 +91,8 @@ private:
     // Game systems
     std::unique_ptr<TaskManager> taskManager_;
     std::unique_ptr<RenderSystem> renderSystem_;
+    std::unique_ptr<PhysicsSystem> physicsSystem_;
+    std::unique_ptr<TextRenderer> textRenderer_;
 
     // Game loop control
     bool running_;
