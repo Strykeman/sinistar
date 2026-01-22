@@ -18,6 +18,7 @@ class TaskManager;
 class RenderSystem;
 class PhysicsSystem;
 class TextRenderer;
+class Player;
 
 class GameEngine {
 public:
@@ -64,9 +65,9 @@ public:
 
 private:
     /**
-     * Initialize Phase 2 test scene
+     * Initialize Phase 3 player test
      */
-    void initPhase2Test();
+    void initPhase3Player();
 
     /**
      * Process SDL events (input, window events)
@@ -84,6 +85,11 @@ private:
      */
     void render();
 
+    /**
+     * Draw HUD (lives, bombs, shield)
+     */
+    void drawHUD();
+
     // SDL resources
     SDL_Window* window_;
     SDL_Renderer* renderer_;
@@ -93,6 +99,9 @@ private:
     std::unique_ptr<RenderSystem> renderSystem_;
     std::unique_ptr<PhysicsSystem> physicsSystem_;
     std::unique_ptr<TextRenderer> textRenderer_;
+
+    // Game entities
+    std::unique_ptr<Player> player_;
 
     // Game loop control
     bool running_;

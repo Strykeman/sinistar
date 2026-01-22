@@ -12,12 +12,11 @@
 #include "../graphics/TextRenderer.h"
 #include "../graphics/Color.h"
 #include "../entities/GameObject.h"
+#include "../entities/Player.h"
+#include "../input/InputSystem.h"
 #include <iostream>
 #include <stdexcept>
-#include <vector>
-
-// Test objects for Phase 2
-static std::vector<GameObject*> testObjects;
+#include <cstdio>
 
 GameEngine::GameEngine(int windowWidth, int windowHeight,
                        int logicalWidth, int logicalHeight)
@@ -72,19 +71,16 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
     );
     textRenderer_ = std::make_unique<TextRenderer>(renderer_);
 
-    // Initialize Phase 2 test scene
-    initPhase2Test();
+    // Initialize Phase 3 player
+    initPhase3Player();
 
     std::cout << "Game engine initialized" << std::endl;
-    std::cout << "Phase 2 systems active: Math, Physics, Text Rendering, Color Palette" << std::endl;
+    std::cout << "Phase 3: Player ship ready!" << std::endl;
 }
 
 GameEngine::~GameEngine() {
-    // Clean up test objects
-    for (GameObject* obj : testObjects) {
-        delete obj;
-    }
-    testObjects.clear();
+    // Clean up entities
+    player_.reset();
 
     // Clean up systems
     textRenderer_.reset();
@@ -143,16 +139,12 @@ void GameEngine::handleEvents() {
     SDL_Event event;
 
     while (SDL_PollEvent(&event)) {
+        // Let input system process event first
+        InputSystem::getInstance().processEvent(event);
+
         switch (event.type) {
             case SDL_QUIT:
                 quit();
-                break;
-
-            case SDL_KEYDOWN:
-                // ESC to quit (temporary - will be removed later)
-                if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    quit();
-                }
                 break;
 
             case SDL_WINDOWEVENT:
@@ -166,14 +158,28 @@ void GameEngine::handleEvents() {
                 break;
         }
     }
+
+    // Check for quit button (ESC or gamepad back)
+    if (InputSystem::getInstance().isButtonPressed(InputButton::QUIT)) {
+        quit();
+    }
 }
 
 void GameEngine::update(float deltaTime) {
+    // Update input system
+    InputSystem::getInstance().update();
+
+    // Update player
+    if (player_) {
+        player_->handleInput(deltaTime);
+        player_->update(deltaTime);
+    }
+
     // Update task manager (will execute all active tasks)
     // This replicates the task execution from the executive loop
     taskManager_->update(deltaTime);
 
-    // Update physics system (Phase 2)
+    // Update physics system
     physicsSystem_->update(deltaTime);
 
     // Update text renderer (timed messages)
@@ -198,104 +204,97 @@ void GameEngine::render() {
     SDL_Rect border = {0, 0, logicalWidth_, logicalHeight_};
     SDL_RenderDrawRect(renderer_, &border);
 
-    // Phase 2 Test: Render test objects
-    for (GameObject* obj : testObjects) {
-        if (obj && obj->isActive()) {
-            Vector2 pos = obj->getPosition();
-
-            // Draw object as a colored circle (using rectangles)
-            SDL_Rect objRect = {
-                static_cast<int>(pos.x - 2),
-                static_cast<int>(pos.y - 2),
-                4,
-                4
-            };
-
-            // Color based on status (test)
-            uint32_t status = obj->getStatus();
-            Color objColor = ColorPalette::getInstance().getColor(status % 16);
-            SDL_SetRenderDrawColor(renderer_, objColor.r, objColor.g, objColor.b, objColor.a);
-            SDL_RenderFillRect(renderer_, &objRect);
-
-            // Draw velocity vector
-            Vector2 vel = obj->getVelocity();
-            if (vel.lengthSquared() > 0.1f) {
-                SDL_SetRenderDrawColor(renderer_, 0, 255, 0, 128);
-                SDL_RenderDrawLine(renderer_,
-                    static_cast<int>(pos.x),
-                    static_cast<int>(pos.y),
-                    static_cast<int>(pos.x + vel.x * 2.0f),
-                    static_cast<int>(pos.y + vel.y * 2.0f)
-                );
-            }
-        }
+    // Render player
+    if (player_ && player_->isActive()) {
+        player_->render(renderer_);
     }
 
-    // Render text (Phase 2 test)
+    // Render text/UI
     textRenderer_->render();
+
+    // Draw HUD
+    drawHUD();
 
     // Present frame
     SDL_RenderPresent(renderer_);
 }
 
-void GameEngine::initPhase2Test() {
-    std::cout << "\n=== Phase 2 Test Initialization ===" << std::endl;
+void GameEngine::drawHUD() {
+    if (!player_) return;
+
+    // Draw player stats in top-left
+    char buffer[64];
+
+    // Lives
+    snprintf(buffer, sizeof(buffer), "LIVES: %d", player_->getLives());
+    textRenderer_->drawText(buffer, 10, 10, BitmapFont::Size::SMALL_3x5, Color::WHITE);
+
+    // Bombs
+    snprintf(buffer, sizeof(buffer), "BOMBS: %d", player_->getBombCount());
+    textRenderer_->drawText(buffer, 10, 20, BitmapFont::Size::SMALL_3x5, Color::YELLOW);
+
+    // Shield
+    int shieldPercent = static_cast<int>(player_->getShieldStrength() * 100);
+    snprintf(buffer, sizeof(buffer), "SHIELD: %d%%", shieldPercent);
+    Color shieldColor = player_->hasShield() ? Color::GREEN : Color::RED;
+    textRenderer_->drawText(buffer, 10, 30, BitmapFont::Size::SMALL_3x5, shieldColor);
+}
+
+void GameEngine::initPhase3Player() {
+    std::cout << "\n=== Phase 3 Player Initialization ===" << std::endl;
 
     // Initialize color palette
     ColorPalette::getInstance().initializeDefaultPalette();
     std::cout << "Color palette initialized" << std::endl;
 
-    // Create test objects with different velocities and positions
-    for (int i = 0; i < 10; i++) {
-        GameObject* obj = new GameObject();
+    // Create player ship
+    player_ = std::make_unique<Player>();
 
-        // Random-ish position
-        float x = (logicalWidth_ / 11.0f) * (i + 1);
-        float y = logicalHeight_ / 2.0f + (i % 3 - 1) * 30.0f;
-        obj->setPosition(x, y);
+    // Position player in center of screen
+    player_->setPosition(
+        logicalWidth_ / 2.0f,
+        logicalHeight_ / 2.0f
+    );
 
-        // Random-ish velocity
-        float vx = (i % 5 - 2) * 10.0f;
-        float vy = ((i + 3) % 5 - 2) * 10.0f;
-        obj->setVelocity(vx, vy);
+    // Give player some starting bombs for testing
+    player_->addBombs(10);
 
-        // Set status for color
-        obj->setStatus(i + 2);  // Use palette colors 2-11
+    // Register player with physics system (for screen wrapping)
+    physicsSystem_->registerObject(player_.get());
 
-        // Register with physics system
-        physicsSystem_->registerObject(obj);
+    std::cout << "Player ship created at center" << std::endl;
 
-        testObjects.push_back(obj);
-    }
-    std::cout << "Created " << testObjects.size() << " test objects with physics" << std::endl;
-
-    // Add test messages
+    // Add welcome message
     textRenderer_->showMessage(
-        "SINISTAR - PHASE 2",
-        Vector2(logicalWidth_ / 2.0f, 20.0f),
-        0.0f,  // Permanent
+        "SINISTAR - PHASE 3",
+        Vector2(logicalWidth_ / 2.0f, 50.0f),
+        5.0f,  // Show for 5 seconds
         Color::WHITE,
         BitmapFont::Size::LARGE_6x8
     );
 
     textRenderer_->showMessage(
-        "MATH + PHYSICS + TEXT RENDERING",
-        Vector2(logicalWidth_ / 2.0f, 32.0f),
-        0.0f,
+        "PLAYER SHIP READY",
+        Vector2(logicalWidth_ / 2.0f, 62.0f),
+        5.0f,
         Color::CYAN,
         BitmapFont::Size::SMALL_3x5
     );
 
+    // Controls hint
     textRenderer_->showMessage(
-        "SCREEN WRAPPING ACTIVE",
-        Vector2(logicalWidth_ / 2.0f, logicalHeight_ - 20.0f),
-        0.0f,
+        "ARROWS: ROTATE  UP: THRUST  SPACE: FIRE  ESC: QUIT",
+        Vector2(logicalWidth_ / 2.0f, logicalHeight_ - 15.0f),
+        0.0f,  // Permanent
         Color::YELLOW,
         BitmapFont::Size::SMALL_3x5
     );
 
-    std::cout << "Test messages added" << std::endl;
-    std::cout << "=== Phase 2 Test Ready ===" << std::endl;
-    std::cout << "Watch objects move and wrap around screen!" << std::endl;
-    std::cout << "Press ESC to quit\n" << std::endl;
+    std::cout << "=== Phase 3 Player Ready ===" << std::endl;
+    std::cout << "Controls:" << std::endl;
+    std::cout << "  Arrow Keys / WASD - Rotate & Thrust" << std::endl;
+    std::cout << "  Space / Ctrl - Fire weapon" << std::endl;
+    std::cout << "  ESC - Quit" << std::endl;
+    std::cout << "  Gamepad also supported!" << std::endl;
+    std::cout << std::endl;
 }

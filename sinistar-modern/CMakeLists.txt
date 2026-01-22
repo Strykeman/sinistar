@@ -48,11 +48,16 @@ set(CORE_SOURCES
 
 set(ENTITY_SOURCES
     src/entities/GameObject.cpp
+    src/entities/Player.cpp
 )
 
 set(SYSTEM_SOURCES
     src/systems/RenderSystem.cpp
     src/systems/PhysicsSystem.cpp
+)
+
+set(INPUT_SOURCES
+    src/input/InputSystem.cpp
 )
 
 set(GRAPHICS_SOURCES
@@ -70,6 +75,7 @@ set(ALL_SOURCES
     ${CORE_SOURCES}
     ${ENTITY_SOURCES}
     ${SYSTEM_SOURCES}
+    ${INPUT_SOURCES}
     ${GRAPHICS_SOURCES}
 )
 
