@@ -26,6 +26,8 @@ class ScoreManager;
 class Player;
 class Sinibomb;
 class Warrior;
+class Crystal;
+class Worker;
 
 class GameEngine {
 public:
@@ -113,6 +115,16 @@ private:
     void updateEnemies(float deltaTime);
 
     /**
+     * Update crystals
+     */
+    void updateCrystals(float deltaTime);
+
+    /**
+     * Update workers
+     */
+    void updateWorkers(float deltaTime);
+
+    /**
      * Check collisions
      */
     void checkCollisions();
@@ -121,6 +133,16 @@ private:
      * Spawn enemies
      */
     void spawnEnemy();
+
+    /**
+     * Spawn crystal planetoid
+     */
+    void spawnCrystal();
+
+    /**
+     * Spawn worker
+     */
+    void spawnWorker();
 
     /**
      * Clean up dead entities
@@ -144,11 +166,19 @@ private:
     std::unique_ptr<Player> player_;
     std::vector<Sinibomb*> projectiles_;
     std::vector<Warrior*> enemies_;
+    std::vector<Crystal*> crystals_;
+    std::vector<Worker*> workers_;
 
     // Spawning
     float enemySpawnTimer_;
     float enemySpawnInterval_;
     int maxEnemies_;
+    float crystalSpawnTimer_;
+    float crystalSpawnInterval_;
+    int maxCrystals_;
+    float workerSpawnTimer_;
+    float workerSpawnInterval_;
+    int maxWorkers_;
 
     // Game loop control
     bool running_;

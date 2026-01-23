@@ -53,6 +53,8 @@ set(ENTITY_SOURCES
     src/entities/Player.cpp
     src/entities/Sinibomb.cpp
     src/entities/Warrior.cpp
+    src/entities/Crystal.cpp
+    src/entities/Worker.cpp
 )
 
 set(SYSTEM_SOURCES

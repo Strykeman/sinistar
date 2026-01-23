@@ -19,6 +19,8 @@
 #include "../entities/Player.h"
 #include "../entities/Sinibomb.h"
 #include "../entities/Warrior.h"
+#include "../entities/Crystal.h"
+#include "../entities/Worker.h"
 #include "../input/InputSystem.h"
 #include <iostream>
 #include <stdexcept>
@@ -35,6 +37,12 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
     , enemySpawnTimer_(0.0f)
     , enemySpawnInterval_(2.0f)   // Spawn enemy every 2 seconds
     , maxEnemies_(10)             // Max 10 enemies at once
+    , crystalSpawnTimer_(0.0f)
+    , crystalSpawnInterval_(5.0f) // Spawn crystal every 5 seconds
+    , maxCrystals_(15)            // Max 15 crystals at once
+    , workerSpawnTimer_(0.0f)
+    , workerSpawnInterval_(3.0f)  // Spawn worker every 3 seconds
+    , maxWorkers_(8)              // Max 8 workers at once
     , lastFrameTime_(0)
 {
     // Create window
@@ -110,6 +118,16 @@ GameEngine::~GameEngine() {
         delete enemy;
     }
     enemies_.clear();
+
+    for (Crystal* crystal : crystals_) {
+        delete crystal;
+    }
+    crystals_.clear();
+
+    for (Worker* worker : workers_) {
+        delete worker;
+    }
+    workers_.clear();
 
     player_.reset();
 
@@ -278,11 +296,31 @@ void GameEngine::update(float deltaTime) {
         // Update enemies
         updateEnemies(deltaTime);
 
+        // Update crystals
+        updateCrystals(deltaTime);
+
+        // Update workers
+        updateWorkers(deltaTime);
+
         // Spawn new enemies
         enemySpawnTimer_ += deltaTime;
         if (enemySpawnTimer_ >= enemySpawnInterval_ && enemies_.size() < static_cast<size_t>(maxEnemies_)) {
             spawnEnemy();
             enemySpawnTimer_ = 0.0f;
+        }
+
+        // Spawn new crystals
+        crystalSpawnTimer_ += deltaTime;
+        if (crystalSpawnTimer_ >= crystalSpawnInterval_ && crystals_.size() < static_cast<size_t>(maxCrystals_)) {
+            spawnCrystal();
+            crystalSpawnTimer_ = 0.0f;
+        }
+
+        // Spawn new workers
+        workerSpawnTimer_ += deltaTime;
+        if (workerSpawnTimer_ >= workerSpawnInterval_ && workers_.size() < static_cast<size_t>(maxWorkers_)) {
+            spawnWorker();
+            workerSpawnTimer_ = 0.0f;
         }
 
         // Check collisions
@@ -322,6 +360,13 @@ void GameEngine::render() {
     // Render particles (behind other objects)
     particleSystem_->render(renderer_);
 
+    // Render crystals (background objects)
+    for (Crystal* crystal : crystals_) {
+        if (crystal && crystal->isActive()) {
+            crystal->render(renderer_);
+        }
+    }
+
     // Render projectiles
     for (Sinibomb* proj : projectiles_) {
         if (proj && proj->isActive()) {
@@ -333,6 +378,13 @@ void GameEngine::render() {
     for (Warrior* enemy : enemies_) {
         if (enemy && enemy->isActive()) {
             enemy->render(renderer_);
+        }
+    }
+
+    // Render workers
+    for (Worker* worker : workers_) {
+        if (worker && worker->isActive()) {
+            worker->render(renderer_);
         }
     }
 
@@ -439,6 +491,18 @@ void GameEngine::resetGame() {
     }
     enemies_.clear();
 
+    for (Crystal* crystal : crystals_) {
+        physicsSystem_->unregisterObject(crystal);
+        delete crystal;
+    }
+    crystals_.clear();
+
+    for (Worker* worker : workers_) {
+        physicsSystem_->unregisterObject(worker);
+        delete worker;
+    }
+    workers_.clear();
+
     // Clear particles
     particleSystem_->clear();
 
@@ -449,6 +513,14 @@ void GameEngine::resetGame() {
     enemySpawnTimer_ = 0.0f;
     enemySpawnInterval_ = scoreManager_->getEnemySpawnRate();
     maxEnemies_ = scoreManager_->getMaxEnemies();
+
+    crystalSpawnTimer_ = 0.0f;
+    crystalSpawnInterval_ = 5.0f;
+    maxCrystals_ = 15;
+
+    workerSpawnTimer_ = 0.0f;
+    workerSpawnInterval_ = 3.0f;
+    maxWorkers_ = 8;
 
     // Reset player
     if (player_) {
@@ -561,6 +633,121 @@ void GameEngine::checkCollisions() {
                 }
             }
         }
+
+        // Enemy Worker collisions
+        for (Worker* worker : workers_) {
+            if (!worker || !worker->isActive()) continue;
+
+            float dist = MathUtils::distance(player_->getPosition(), worker->getPosition());
+            float collisionDist = 8.0f + worker->getRadius();  // Player radius ~8
+
+            if (dist < collisionDist) {
+                // Collision with worker - less damage than warrior
+                Vector2 impactDir = (worker->getPosition() - player_->getPosition()).normalized();
+
+                bool workerDestroyed = worker->takeDamage(0.5f);
+                if (workerDestroyed) {
+                    particleSystem_->createExplosion(worker->getPosition(), {100, 100, 255, 255}, 20);
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_EXPLODE);
+
+                    // Bonus if worker was carrying crystal
+                    if (worker->isCarryingCrystal()) {
+                        scoreManager_->addScore(150);
+                    } else {
+                        scoreManager_->addScore(50);
+                    }
+                    scoreManager_->addKill();
+                }
+
+                bool playerDestroyed = player_->takeDamage(0.2f);  // Less damage from worker
+                if (playerDestroyed) {
+                    particleSystem_->createExplosion(player_->getPosition(), {0, 255, 255, 255}, 40);
+                    AudioManager::getInstance().playSound(SoundEffect::PLAYER_DIE);
+                } else {
+                    particleSystem_->createImpact(player_->getPosition(), impactDir * -1.0f, {255, 255, 255, 255});
+                    AudioManager::getInstance().playSound(SoundEffect::PLAYER_HIT);
+                }
+            }
+        }
+    }
+
+    // Projectile vs Crystal collisions
+    for (Sinibomb* proj : projectiles_) {
+        if (!proj || !proj->isActive()) continue;
+
+        for (Crystal* crystal : crystals_) {
+            if (!crystal || !crystal->isActive()) continue;
+
+            float dist = MathUtils::distance(proj->getPosition(), crystal->getPosition());
+            float collisionDist = proj->getRadius() + crystal->getRadius();
+
+            if (dist < collisionDist) {
+                // Hit crystal!
+                bool destroyed = crystal->takeDamage(proj->getDamage());
+
+                if (destroyed) {
+                    // Crystal destroyed - award points based on size
+                    int points = static_cast<int>(crystal->getCrystalAmount() * 25.0f);
+                    scoreManager_->addScore(points);
+
+                    // Green explosion
+                    particleSystem_->createExplosion(crystal->getPosition(), {100, 255, 100, 255}, 25);
+                    AudioManager::getInstance().playSound(SoundEffect::PICKUP_CRYSTAL, 0.8f);
+                } else {
+                    // Crystal hit but not destroyed
+                    particleSystem_->createImpact(crystal->getPosition(), proj->getVelocity(), {150, 255, 150, 255});
+                }
+
+                // Projectile explodes
+                proj->explode();
+                scoreManager_->recordShotHit();
+                break;
+            }
+        }
+    }
+
+    // Projectile vs Worker collisions
+    for (Sinibomb* proj : projectiles_) {
+        if (!proj || !proj->isActive()) continue;
+
+        for (Worker* worker : workers_) {
+            if (!worker || !worker->isActive()) continue;
+
+            float dist = MathUtils::distance(proj->getPosition(), worker->getPosition());
+            float collisionDist = proj->getRadius() + worker->getRadius();
+
+            if (dist < collisionDist) {
+                // Hit worker!
+                bool destroyed = worker->takeDamage(proj->getDamage());
+
+                if (destroyed) {
+                    // Worker destroyed
+                    particleSystem_->createExplosion(worker->getPosition(), {100, 100, 255, 255}, 25);
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_EXPLODE);
+
+                    // Award points (bonus if carrying crystal)
+                    int basePoints = 50;
+                    if (worker->isCarryingCrystal()) {
+                        basePoints = 150;
+                    }
+                    int points = static_cast<int>(basePoints * scoreManager_->getDifficultyMultiplier());
+                    scoreManager_->addScore(points);
+                    scoreManager_->addKill();
+                } else {
+                    // Worker hit but not destroyed
+                    particleSystem_->createImpact(worker->getPosition(), proj->getVelocity(), {150, 150, 255, 255});
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_HIT, 0.5f);
+                    scoreManager_->addScore(10);
+                }
+
+                // Projectile explodes
+                particleSystem_->createExplosion(proj->getPosition(), {255, 255, 0, 255}, 15);
+                AudioManager::getInstance().playSound(SoundEffect::SINIBOMB_EXPLODE, 0.7f);
+                proj->explode();
+                scoreManager_->recordShotHit();
+                break;
+            }
+        }
     }
 }
 
@@ -606,6 +793,117 @@ void GameEngine::spawnEnemy() {
     enemies_.push_back(enemy);
 }
 
+void GameEngine::spawnCrystal() {
+    // Random position in play area (not at edges)
+    Vector2 spawnPos;
+    spawnPos.x = 40.0f + static_cast<float>(rand() % (logicalWidth_ - 80));
+    spawnPos.y = 40.0f + static_cast<float>(rand() % (logicalHeight_ - 80));
+
+    // Create crystal
+    Crystal* crystal = new Crystal();
+    crystal->setPosition(spawnPos);
+
+    // Register with physics for screen wrapping
+    physicsSystem_->registerObject(crystal);
+
+    crystals_.push_back(crystal);
+}
+
+void GameEngine::spawnWorker() {
+    // Random spawn position at edge of screen
+    Vector2 spawnPos;
+    int edge = rand() % 4;
+
+    switch (edge) {
+        case 0: // Top
+            spawnPos.x = static_cast<float>(rand() % logicalWidth_);
+            spawnPos.y = 0.0f;
+            break;
+        case 1: // Right
+            spawnPos.x = static_cast<float>(logicalWidth_);
+            spawnPos.y = static_cast<float>(rand() % logicalHeight_);
+            break;
+        case 2: // Bottom
+            spawnPos.x = static_cast<float>(rand() % logicalWidth_);
+            spawnPos.y = static_cast<float>(logicalHeight_);
+            break;
+        case 3: // Left
+            spawnPos.x = 0.0f;
+            spawnPos.y = static_cast<float>(rand() % logicalHeight_);
+            break;
+    }
+
+    // Create worker
+    Worker* worker = new Worker();
+    worker->setPosition(spawnPos);
+
+    // Set player reference
+    if (player_) {
+        worker->setPlayer(player_.get());
+    }
+
+    // Assign nearest crystal as target
+    if (!crystals_.empty()) {
+        Crystal* nearest = nullptr;
+        float nearestDist = 999999.0f;
+
+        for (Crystal* crystal : crystals_) {
+            if (crystal && crystal->isActive() && !crystal->isDepleted()) {
+                float dist = MathUtils::distance(spawnPos, crystal->getPosition());
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearest = crystal;
+                }
+            }
+        }
+
+        if (nearest) {
+            worker->setTargetCrystal(nearest);
+        }
+    }
+
+    // Register with physics for screen wrapping
+    physicsSystem_->registerObject(worker);
+
+    workers_.push_back(worker);
+}
+
+void GameEngine::updateCrystals(float deltaTime) {
+    for (Crystal* crystal : crystals_) {
+        if (crystal && crystal->isActive()) {
+            crystal->update(deltaTime);
+        }
+    }
+}
+
+void GameEngine::updateWorkers(float deltaTime) {
+    for (Worker* worker : workers_) {
+        if (worker && worker->isActive()) {
+            worker->update(deltaTime);
+
+            // Reassign crystal target if needed
+            if (worker->getState() == WorkerState::SEARCHING) {
+                Crystal* nearest = nullptr;
+                float nearestDist = 999999.0f;
+
+                for (Crystal* crystal : crystals_) {
+                    if (crystal && crystal->isActive() && !crystal->isDepleted()) {
+                        float dist = MathUtils::distance(worker->getPosition(), crystal->getPosition());
+                        if (dist < nearestDist) {
+                            nearestDist = dist;
+                            nearest = crystal;
+                        }
+                    }
+                }
+
+                if (nearest) {
+                    worker->setTargetCrystal(nearest);
+                }
+            }
+        }
+    }
+}
+
 void GameEngine::cleanupEntities() {
     // Remove dead projectiles
     auto projIt = projectiles_.begin();
@@ -628,6 +926,35 @@ void GameEngine::cleanupEntities() {
             enemyIt = enemies_.erase(enemyIt);
         } else {
             ++enemyIt;
+        }
+    }
+
+    // Remove depleted crystals
+    auto crystalIt = crystals_.begin();
+    while (crystalIt != crystals_.end()) {
+        if ((*crystalIt)->shouldRemove()) {
+            physicsSystem_->unregisterObject(*crystalIt);
+            delete *crystalIt;
+            crystalIt = crystals_.erase(crystalIt);
+        } else {
+            ++crystalIt;
+        }
+    }
+
+    // Remove dead workers
+    auto workerIt = workers_.begin();
+    while (workerIt != workers_.end()) {
+        if ((*workerIt)->shouldRemove()) {
+            // Drop crystal if carrying
+            if ((*workerIt)->isCarryingCrystal()) {
+                // Could spawn pickup item here
+                scoreManager_->addScore(50);  // Bonus for destroying worker with crystal
+            }
+            physicsSystem_->unregisterObject(*workerIt);
+            delete *workerIt;
+            workerIt = workers_.erase(workerIt);
+        } else {
+            ++workerIt;
         }
     }
 }
