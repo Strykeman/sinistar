@@ -21,6 +21,7 @@
 #include "../entities/Warrior.h"
 #include "../entities/Crystal.h"
 #include "../entities/Worker.h"
+#include "../entities/Sinistar.h"
 #include "../input/InputSystem.h"
 #include <iostream>
 #include <stdexcept>
@@ -302,6 +303,24 @@ void GameEngine::update(float deltaTime) {
         // Update workers
         updateWorkers(deltaTime);
 
+        // Update Sinistar
+        if (sinistar_) {
+            sinistar_->update(deltaTime);
+
+            // Display voice lines
+            std::string voiceLine = sinistar_->getVoiceLine();
+            if (!voiceLine.empty()) {
+                textRenderer_->showMessage(
+                    voiceLine,
+                    Vector2(logicalWidth_ / 2.0f, 50.0f),
+                    3.0f,
+                    Color::RED,
+                    BitmapFont::Size::LARGE_6x8
+                );
+                sinistar_->clearVoiceLine();
+            }
+        }
+
         // Spawn new enemies
         enemySpawnTimer_ += deltaTime;
         if (enemySpawnTimer_ >= enemySpawnInterval_ && enemies_.size() < static_cast<size_t>(maxEnemies_)) {
@@ -388,6 +407,11 @@ void GameEngine::render() {
         }
     }
 
+    // Render Sinistar (before player so player is always visible)
+    if (sinistar_) {
+        sinistar_->render(renderer_);
+    }
+
     // Render player
     if (player_ && player_->isActive()) {
         player_->render(renderer_);
@@ -463,6 +487,12 @@ void GameEngine::initializeGame() {
 
     std::cout << "Player ship created at center" << std::endl;
 
+    // Create Sinistar (starts in BUILDING state)
+    sinistar_ = std::make_unique<Sinistar>();
+    sinistar_->setTarget(player_.get());
+    physicsSystem_->registerObject(sinistar_.get());
+    std::cout << "Sinistar created (under construction)" << std::endl;
+
     // Controls hint
     textRenderer_->showMessage(
         "ARROWS: ROTATE  UP: THRUST  SPACE: FIRE  P: PAUSE  ESC: QUIT",
@@ -534,6 +564,14 @@ void GameEngine::resetGame() {
     player_->addBombs(10);
     player_->setLives(3);
     physicsSystem_->registerObject(player_.get());
+
+    // Reset Sinistar
+    if (sinistar_) {
+        physicsSystem_->unregisterObject(sinistar_.get());
+    }
+    sinistar_ = std::make_unique<Sinistar>();
+    sinistar_->setTarget(player_.get());
+    physicsSystem_->registerObject(sinistar_.get());
 
     std::cout << "Game reset complete" << std::endl;
 }
@@ -749,6 +787,74 @@ void GameEngine::checkCollisions() {
             }
         }
     }
+
+    // Projectile vs Sinistar collisions
+    if (sinistar_ && sinistar_->isActive()) {
+        for (Sinibomb* proj : projectiles_) {
+            if (!proj || !proj->isActive()) continue;
+
+            float dist = MathUtils::distance(proj->getPosition(), sinistar_->getPosition());
+            float collisionDist = proj->getRadius() + sinistar_->getRadius();
+
+            if (dist < collisionDist) {
+                // Hit Sinistar!
+                bool destroyed = sinistar_->takeDamage(proj->getDamage());
+
+                if (destroyed) {
+                    // Sinistar destroyed! Huge points!
+                    int points = 10000 * scoreManager_->getDifficultyMultiplier();
+                    scoreManager_->addScore(points);
+                    scoreManager_->addKill();
+
+                    // Massive explosion
+                    particleSystem_->createExplosion(sinistar_->getPosition(), {255, 100, 0, 255}, 60);
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_EXPLODE);
+
+                    // Victory message
+                    textRenderer_->showMessage(
+                        "SINISTAR DESTROYED! +10000",
+                        Vector2(logicalWidth_ / 2.0f, logicalHeight_ / 2.0f),
+                        5.0f,
+                        Color::YELLOW,
+                        BitmapFont::Size::LARGE_6x8
+                    );
+                } else {
+                    // Hit but not destroyed
+                    particleSystem_->createImpact(sinistar_->getPosition(), proj->getVelocity(), {255, 200, 0, 255});
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_HIT, 0.8f);
+                    scoreManager_->addScore(50);
+                }
+
+                // Projectile explodes
+                proj->explode();
+                scoreManager_->recordShotHit();
+                break;
+            }
+        }
+
+        // Sinistar bite attack vs Player
+        if (player_ && player_->isActive()) {
+            if (sinistar_->getState() == SinistarState::BITING) {
+                float dist = MathUtils::distance(player_->getPosition(), sinistar_->getPosition());
+                float biteRange = sinistar_->getRadius() + 10.0f;
+
+                if (dist < biteRange) {
+                    // Sinistar bites player!
+                    bool playerDestroyed = player_->takeDamage(1.0f);  // Heavy damage!
+
+                    if (playerDestroyed) {
+                        particleSystem_->createExplosion(player_->getPosition(), {0, 255, 255, 255}, 50);
+                        AudioManager::getInstance().playSound(SoundEffect::PLAYER_DIE);
+                    } else {
+                        particleSystem_->createImpact(player_->getPosition(),
+                            (player_->getPosition() - sinistar_->getPosition()).normalized(),
+                            {255, 255, 255, 255});
+                        AudioManager::getInstance().playSound(SoundEffect::PLAYER_HIT);
+                    }
+                }
+            }
+        }
+    }
 }
 
 void GameEngine::spawnEnemy() {
@@ -879,6 +985,30 @@ void GameEngine::updateCrystals(float deltaTime) {
 void GameEngine::updateWorkers(float deltaTime) {
     for (Worker* worker : workers_) {
         if (worker && worker->isActive()) {
+            // Check if worker is returning and near Sinistar
+            if (worker->getState() == WorkerState::RETURNING && worker->isCarryingCrystal()) {
+                float distToCenter = MathUtils::distance(worker->getPosition(), Vector2(128.0f, 122.0f));
+                if (distToCenter < 30.0f && sinistar_) {
+                    // Deliver crystal to Sinistar!
+                    float amount = worker->getCrystalAmount();
+                    bool completed = sinistar_->addCrystal(amount);
+                    worker->dropCrystal();  // Worker delivers crystal
+
+                    if (completed && sinistar_->isConstructed()) {
+                        // Sinistar construction complete!
+                        sinistar_->activate();
+                        textRenderer_->showMessage(
+                            "BEWARE, I LIVE!",
+                            Vector2(logicalWidth_ / 2.0f, 60.0f),
+                            3.0f,
+                            Color::RED,
+                            BitmapFont::Size::LARGE_6x8
+                        );
+                        AudioManager::getInstance().playSound(SoundEffect::ENEMY_EXPLODE);  // Use explosion for dramatic effect
+                    }
+                }
+            }
+
             worker->update(deltaTime);
 
             // Reassign crystal target if needed

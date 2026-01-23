@@ -28,6 +28,7 @@ class Sinibomb;
 class Warrior;
 class Crystal;
 class Worker;
+class Sinistar;
 
 class GameEngine {
 public:
@@ -164,6 +165,7 @@ private:
 
     // Game entities
     std::unique_ptr<Player> player_;
+    std::unique_ptr<Sinistar> sinistar_;
     std::vector<Sinibomb*> projectiles_;
     std::vector<Warrior*> enemies_;
     std::vector<Crystal*> crystals_;
