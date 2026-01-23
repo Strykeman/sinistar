@@ -461,6 +461,36 @@ void GameEngine::drawHUD() {
 
     snprintf(buffer, sizeof(buffer), "KILLS: %d", scoreManager_->getKillCount());
     textRenderer_->drawText(buffer, logicalWidth_ - 100, 30, BitmapFont::Size::SMALL_3x5, Color::WHITE);
+
+    // Draw Sinistar construction progress (center top)
+    if (sinistar_ && !sinistar_->isActive()) {
+        float progress = sinistar_->getConstructionProgress();
+        int progressPercent = static_cast<int>(progress * 100);
+        snprintf(buffer, sizeof(buffer), "SINISTAR: %d%%", progressPercent);
+        Color progressColor = progress < 0.5f ? Color::YELLOW : Color::RED;
+        textRenderer_->drawText(buffer, logicalWidth_ / 2 - 40, 10, BitmapFont::Size::SMALL_3x5, progressColor);
+
+        // Progress bar
+        int barWidth = static_cast<int>(80 * progress);
+        SDL_SetRenderDrawColor(renderer_, progressColor.r, progressColor.g, progressColor.b, 255);
+        SDL_Rect progressBar = {logicalWidth_ / 2 - 40, 18, barWidth, 3};
+        SDL_RenderFillRect(renderer_, &progressBar);
+    }
+
+    // Draw Sinistar health if active (center top)
+    if (sinistar_ && sinistar_->isActive()) {
+        float healthRatio = sinistar_->getHealth() / sinistar_->getMaxHealth();
+        int healthPercent = static_cast<int>(healthRatio * 100);
+        snprintf(buffer, sizeof(buffer), "SINISTAR HP: %d%%", healthPercent);
+        Color healthColor = healthRatio > 0.5f ? Color::RED : Color::YELLOW;
+        textRenderer_->drawText(buffer, logicalWidth_ / 2 - 50, 10, BitmapFont::Size::SMALL_3x5, healthColor);
+
+        // Health bar
+        int barWidth = static_cast<int>(100 * healthRatio);
+        SDL_SetRenderDrawColor(renderer_, healthColor.r, healthColor.g, healthColor.b, 255);
+        SDL_Rect healthBar = {logicalWidth_ / 2 - 50, 18, barWidth, 3};
+        SDL_RenderFillRect(renderer_, &healthBar);
+    }
 }
 
 void GameEngine::initializeGame() {
