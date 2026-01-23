@@ -19,6 +19,10 @@ class TaskManager;
 class RenderSystem;
 class PhysicsSystem;
 class TextRenderer;
+class ParticleSystem;
+class AudioManager;
+class GameStateManager;
+class ScoreManager;
 class Player;
 class Sinibomb;
 class Warrior;
@@ -68,9 +72,14 @@ public:
 
 private:
     /**
-     * Initialize Phase 3 player test
+     * Initialize game (start new game)
      */
-    void initPhase3Player();
+    void initializeGame();
+
+    /**
+     * Reset game state
+     */
+    void resetGame();
 
     /**
      * Process SDL events (input, window events)
@@ -127,6 +136,9 @@ private:
     std::unique_ptr<RenderSystem> renderSystem_;
     std::unique_ptr<PhysicsSystem> physicsSystem_;
     std::unique_ptr<TextRenderer> textRenderer_;
+    std::unique_ptr<ParticleSystem> particleSystem_;
+    std::unique_ptr<GameStateManager> stateManager_;
+    std::unique_ptr<ScoreManager> scoreManager_;
 
     // Game entities
     std::unique_ptr<Player> player_;

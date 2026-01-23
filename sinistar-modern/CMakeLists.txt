@@ -42,6 +42,8 @@ find_package(SDL2_image QUIET)
 set(CORE_SOURCES
     src/core/GameEngine.cpp
     src/core/TaskManager.cpp
+    src/core/GameState.cpp
+    src/core/ScoreManager.cpp
     src/core/Timer.cpp
     src/core/Math.cpp
 )
@@ -65,6 +67,11 @@ set(INPUT_SOURCES
 set(GRAPHICS_SOURCES
     src/graphics/Color.cpp
     src/graphics/TextRenderer.cpp
+    src/graphics/Particle.cpp
+)
+
+set(AUDIO_SOURCES
+    src/audio/AudioManager.cpp
 )
 
 set(MAIN_SOURCE
@@ -79,6 +86,7 @@ set(ALL_SOURCES
     ${SYSTEM_SOURCES}
     ${INPUT_SOURCES}
     ${GRAPHICS_SOURCES}
+    ${AUDIO_SOURCES}
 )
 
 # Header files (for IDE)

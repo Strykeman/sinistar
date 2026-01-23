@@ -6,11 +6,15 @@
 
 #include "GameEngine.h"
 #include "TaskManager.h"
+#include "GameState.h"
+#include "ScoreManager.h"
 #include "Math.h"
 #include "../systems/RenderSystem.h"
 #include "../systems/PhysicsSystem.h"
 #include "../graphics/TextRenderer.h"
+#include "../graphics/Particle.h"
 #include "../graphics/Color.h"
+#include "../audio/AudioManager.h"
 #include "../entities/GameObject.h"
 #include "../entities/Player.h"
 #include "../entities/Sinibomb.h"
@@ -76,9 +80,20 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
         static_cast<float>(logicalHeight_)
     );
     textRenderer_ = std::make_unique<TextRenderer>(renderer_);
+    particleSystem_ = std::make_unique<ParticleSystem>();
+    stateManager_ = std::make_unique<GameStateManager>();
+    scoreManager_ = std::make_unique<ScoreManager>();
 
-    // Initialize Phase 3 player
-    initPhase3Player();
+    // Initialize audio system
+    AudioManager::getInstance().initialize();
+
+    // Setup state callbacks
+    stateManager_->setStartGameCallback([this]() { resetGame(); });
+    stateManager_->setResumeGameCallback([this]() { /* Resume game */ });
+    stateManager_->setQuitCallback([this]() { quit(); });
+
+    // Initialize game
+    initializeGame();
 
     std::cout << "Game engine initialized" << std::endl;
     std::cout << "Phase 3: Player ship ready!" << std::endl;
@@ -99,6 +114,10 @@ GameEngine::~GameEngine() {
     player_.reset();
 
     // Clean up systems
+    AudioManager::getInstance().shutdown();
+    scoreManager_.reset();
+    stateManager_.reset();
+    particleSystem_.reset();
     textRenderer_.reset();
     physicsSystem_.reset();
     renderSystem_.reset();
@@ -179,54 +198,109 @@ void GameEngine::handleEvents() {
     if (InputSystem::getInstance().isButtonPressed(InputButton::QUIT)) {
         quit();
     }
+
+    // Let state manager handle input
+    stateManager_->handleInput();
 }
 
 void GameEngine::update(float deltaTime) {
     // Update input system
     InputSystem::getInstance().update();
 
-    // Update player
-    if (player_) {
-        player_->handleInput(deltaTime);
-        player_->update(deltaTime);
+    // Update state manager
+    stateManager_->update(deltaTime);
 
-        // Check if player fired a weapon
-        if (player_->isActive() && InputSystem::getInstance().isButtonPressed(InputButton::FIRE)) {
-            if (player_->canFire()) {
-                Sinibomb* bomb = player_->createSinibomb();
-                if (bomb) {
-                    projectiles_.push_back(bomb);
-                    physicsSystem_->registerObject(bomb);
+    // Check for quit state
+    if (stateManager_->getState() == GameState::QUIT) {
+        quit();
+        return;
+    }
+
+    // Only update game when playing
+    if (stateManager_->isPlaying()) {
+        // Update score manager
+        scoreManager_->update(deltaTime);
+
+        // Check for level advancement
+        if (scoreManager_->shouldAdvanceLevel()) {
+            scoreManager_->advanceLevel();
+
+            // Update difficulty based on new level
+            enemySpawnInterval_ = scoreManager_->getEnemySpawnRate();
+            maxEnemies_ = scoreManager_->getMaxEnemies();
+
+            // Show level up message
+            char levelMsg[64];
+            snprintf(levelMsg, sizeof(levelMsg), "LEVEL %d", scoreManager_->getLevel());
+            textRenderer_->showMessage(
+                levelMsg,
+                Vector2(logicalWidth_ / 2.0f, logicalHeight_ / 2.0f),
+                3.0f,
+                Color::YELLOW,
+                BitmapFont::Size::LARGE_6x8
+            );
+        }
+        // Update player
+        if (player_) {
+            player_->handleInput(deltaTime);
+            player_->update(deltaTime);
+
+            // Check if player fired a weapon
+            if (player_->isActive() && InputSystem::getInstance().isButtonPressed(InputButton::FIRE)) {
+                if (player_->canFire()) {
+                    Sinibomb* bomb = player_->createSinibomb();
+                    if (bomb) {
+                        projectiles_.push_back(bomb);
+                        physicsSystem_->registerObject(bomb);
+                        // Play shoot sound and track stats
+                        AudioManager::getInstance().playSound(SoundEffect::PLAYER_SHOOT, 0.6f);
+                        scoreManager_->recordShotFired();
+                    }
+                }
+            }
+
+            // Check for game over
+            if (!player_->isActive() || player_->getLives() <= 0) {
+                stateManager_->setGameOverReason("GAME OVER");
+                stateManager_->setFinalScore(scoreManager_->getScore());
+                stateManager_->transitionTo(GameState::GAME_OVER);
+
+                // Check for high score
+                if (scoreManager_->isHighScore(scoreManager_->getScore())) {
+                    scoreManager_->addHighScore("YOU", scoreManager_->getScore(), scoreManager_->getLevel());
                 }
             }
         }
+
+        // Update projectiles
+        updateProjectiles(deltaTime);
+
+        // Update enemies
+        updateEnemies(deltaTime);
+
+        // Spawn new enemies
+        enemySpawnTimer_ += deltaTime;
+        if (enemySpawnTimer_ >= enemySpawnInterval_ && enemies_.size() < static_cast<size_t>(maxEnemies_)) {
+            spawnEnemy();
+            enemySpawnTimer_ = 0.0f;
+        }
+
+        // Check collisions
+        checkCollisions();
+
+        // Clean up dead entities
+        cleanupEntities();
+
+        // Update task manager (will execute all active tasks)
+        // This replicates the task execution from the executive loop
+        taskManager_->update(deltaTime);
+
+        // Update physics system
+        physicsSystem_->update(deltaTime);
     }
 
-    // Update projectiles
-    updateProjectiles(deltaTime);
-
-    // Update enemies
-    updateEnemies(deltaTime);
-
-    // Spawn new enemies
-    enemySpawnTimer_ += deltaTime;
-    if (enemySpawnTimer_ >= enemySpawnInterval_ && enemies_.size() < static_cast<size_t>(maxEnemies_)) {
-        spawnEnemy();
-        enemySpawnTimer_ = 0.0f;
-    }
-
-    // Check collisions
-    checkCollisions();
-
-    // Clean up dead entities
-    cleanupEntities();
-
-    // Update task manager (will execute all active tasks)
-    // This replicates the task execution from the executive loop
-    taskManager_->update(deltaTime);
-
-    // Update physics system
-    physicsSystem_->update(deltaTime);
+    // Always update particle system (even when paused for fade effects)
+    particleSystem_->update(deltaTime);
 
     // Update text renderer (timed messages)
     textRenderer_->update(deltaTime);
@@ -244,6 +318,9 @@ void GameEngine::render() {
     SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
     SDL_Rect border = {0, 0, logicalWidth_, logicalHeight_};
     SDL_RenderDrawRect(renderer_, &border);
+
+    // Render particles (behind other objects)
+    particleSystem_->render(renderer_);
 
     // Render projectiles
     for (Sinibomb* proj : projectiles_) {
@@ -267,8 +344,13 @@ void GameEngine::render() {
     // Render text/UI
     textRenderer_->render();
 
-    // Draw HUD
-    drawHUD();
+    // Draw HUD (only during gameplay)
+    if (stateManager_->isPlaying()) {
+        drawHUD();
+    }
+
+    // Render state overlay (menu, pause, game over)
+    stateManager_->render(renderer_, logicalWidth_, logicalHeight_);
 
     // Present frame
     SDL_RenderPresent(renderer_);
@@ -293,10 +375,20 @@ void GameEngine::drawHUD() {
     snprintf(buffer, sizeof(buffer), "SHIELD: %d%%", shieldPercent);
     Color shieldColor = player_->hasShield() ? Color::GREEN : Color::RED;
     textRenderer_->drawText(buffer, 10, 30, BitmapFont::Size::SMALL_3x5, shieldColor);
+
+    // Draw score and level in top-right
+    snprintf(buffer, sizeof(buffer), "SCORE: %d", scoreManager_->getScore());
+    textRenderer_->drawText(buffer, logicalWidth_ - 100, 10, BitmapFont::Size::SMALL_3x5, Color::CYAN);
+
+    snprintf(buffer, sizeof(buffer), "LEVEL: %d", scoreManager_->getLevel());
+    textRenderer_->drawText(buffer, logicalWidth_ - 100, 20, BitmapFont::Size::SMALL_3x5, Color::MAGENTA);
+
+    snprintf(buffer, sizeof(buffer), "KILLS: %d", scoreManager_->getKillCount());
+    textRenderer_->drawText(buffer, logicalWidth_ - 100, 30, BitmapFont::Size::SMALL_3x5, Color::WHITE);
 }
 
-void GameEngine::initPhase3Player() {
-    std::cout << "\n=== Phase 3 Player Initialization ===" << std::endl;
+void GameEngine::initializeGame() {
+    std::cout << "\n=== Game Initialization ===" << std::endl;
 
     // Initialize color palette
     ColorPalette::getInstance().initializeDefaultPalette();
@@ -311,7 +403,7 @@ void GameEngine::initPhase3Player() {
         logicalHeight_ / 2.0f
     );
 
-    // Give player some starting bombs for testing
+    // Give player some starting bombs
     player_->addBombs(10);
 
     // Register player with physics system (for screen wrapping)
@@ -319,39 +411,59 @@ void GameEngine::initPhase3Player() {
 
     std::cout << "Player ship created at center" << std::endl;
 
-    // Add welcome message
-    textRenderer_->showMessage(
-        "SINISTAR - PHASE 3",
-        Vector2(logicalWidth_ / 2.0f, 50.0f),
-        5.0f,  // Show for 5 seconds
-        Color::WHITE,
-        BitmapFont::Size::LARGE_6x8
-    );
-
-    textRenderer_->showMessage(
-        "PLAYER SHIP READY",
-        Vector2(logicalWidth_ / 2.0f, 62.0f),
-        5.0f,
-        Color::CYAN,
-        BitmapFont::Size::SMALL_3x5
-    );
-
     // Controls hint
     textRenderer_->showMessage(
-        "ARROWS: ROTATE  UP: THRUST  SPACE: FIRE  ESC: QUIT",
+        "ARROWS: ROTATE  UP: THRUST  SPACE: FIRE  P: PAUSE  ESC: QUIT",
         Vector2(logicalWidth_ / 2.0f, logicalHeight_ - 15.0f),
         0.0f,  // Permanent
         Color::YELLOW,
         BitmapFont::Size::SMALL_3x5
     );
 
-    std::cout << "=== Phase 3 Player Ready ===" << std::endl;
-    std::cout << "Controls:" << std::endl;
-    std::cout << "  Arrow Keys / WASD - Rotate & Thrust" << std::endl;
-    std::cout << "  Space / Ctrl - Fire weapon" << std::endl;
-    std::cout << "  ESC - Quit" << std::endl;
-    std::cout << "  Gamepad also supported!" << std::endl;
-    std::cout << std::endl;
+    std::cout << "=== Game Initialized ===" << std::endl;
+}
+
+void GameEngine::resetGame() {
+    std::cout << "Resetting game..." << std::endl;
+
+    // Clear all entities
+    for (Sinibomb* proj : projectiles_) {
+        physicsSystem_->unregisterObject(proj);
+        delete proj;
+    }
+    projectiles_.clear();
+
+    for (Warrior* enemy : enemies_) {
+        physicsSystem_->unregisterObject(enemy);
+        delete enemy;
+    }
+    enemies_.clear();
+
+    // Clear particles
+    particleSystem_->clear();
+
+    // Reset score manager
+    scoreManager_->reset();
+
+    // Reset spawn parameters to level 1
+    enemySpawnTimer_ = 0.0f;
+    enemySpawnInterval_ = scoreManager_->getEnemySpawnRate();
+    maxEnemies_ = scoreManager_->getMaxEnemies();
+
+    // Reset player
+    if (player_) {
+        physicsSystem_->unregisterObject(player_.get());
+    }
+
+    player_ = std::make_unique<Player>();
+    player_->setPosition(logicalWidth_ / 2.0f, logicalHeight_ / 2.0f);
+    player_->setVelocity(0.0f, 0.0f);
+    player_->setRotation(0.0f);
+    player_->addBombs(10);
+    player_->setLives(3);
+    physicsSystem_->registerObject(player_.get());
+
+    std::cout << "Game reset complete" << std::endl;
 }
 
 void GameEngine::updateProjectiles(float deltaTime) {
@@ -388,8 +500,33 @@ void GameEngine::checkCollisions() {
 
             if (dist < collisionDist) {
                 // Hit!
-                enemy->takeDamage(proj->getDamage());
+                bool destroyed = enemy->takeDamage(proj->getDamage());
+
+                // Trigger effects
+                if (destroyed) {
+                    // Enemy destroyed - big explosion
+                    particleSystem_->createExplosion(enemy->getPosition(), {255, 100, 0, 255}, 30);
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_EXPLODE);
+
+                    // Award points
+                    int basePoints = 100;
+                    int points = static_cast<int>(basePoints * scoreManager_->getDifficultyMultiplier());
+                    scoreManager_->addScore(points);
+                    scoreManager_->addKill();
+                } else {
+                    // Enemy hit but not destroyed - small impact
+                    particleSystem_->createImpact(enemy->getPosition(), proj->getVelocity(), {255, 200, 0, 255});
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_HIT, 0.5f);
+
+                    // Small points for hit
+                    scoreManager_->addScore(10);
+                }
+
+                // Projectile explodes
+                particleSystem_->createExplosion(proj->getPosition(), {255, 255, 0, 255}, 15);
+                AudioManager::getInstance().playSound(SoundEffect::SINIBOMB_EXPLODE, 0.7f);
                 proj->explode();
+                scoreManager_->recordShotHit();
                 break;
             }
         }
@@ -405,8 +542,23 @@ void GameEngine::checkCollisions() {
 
             if (dist < collisionDist) {
                 // Collision! Damage both
-                enemy->takeDamage(0.5f);
-                player_->takeDamage(0.3f);
+                Vector2 impactDir = (enemy->getPosition() - player_->getPosition()).normalized();
+
+                bool enemyDestroyed = enemy->takeDamage(0.5f);
+                if (enemyDestroyed) {
+                    particleSystem_->createExplosion(enemy->getPosition(), {255, 0, 0, 255}, 25);
+                    AudioManager::getInstance().playSound(SoundEffect::ENEMY_EXPLODE);
+                }
+
+                bool playerDestroyed = player_->takeDamage(0.3f);
+                if (playerDestroyed) {
+                    particleSystem_->createExplosion(player_->getPosition(), {0, 255, 255, 255}, 40);
+                    AudioManager::getInstance().playSound(SoundEffect::PLAYER_DIE);
+                } else {
+                    // Player hit but survived
+                    particleSystem_->createImpact(player_->getPosition(), impactDir * -1.0f, {255, 255, 255, 255});
+                    AudioManager::getInstance().playSound(SoundEffect::PLAYER_HIT);
+                }
             }
         }
     }
