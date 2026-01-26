@@ -160,7 +160,7 @@ void Player::restoreShield(float amount) {
 }
 
 bool Player::canFire() const {
-    return bombCount_ > 0 && timeSinceLastShot_ >= (1.0f / fireRate_);
+    return timeSinceLastShot_ >= (1.0f / fireRate_);
 }
 
 bool Player::fire() {
@@ -168,8 +168,7 @@ bool Player::fire() {
         return false;
     }
 
-    // Decrement ammo and reset cooldown
-    bombCount_--;
+    // Reset cooldown (projectiles have unlimited ammo)
     timeSinceLastShot_ = 0.0f;
 
     // Sinibomb is created by GameEngine via createSinibomb()
