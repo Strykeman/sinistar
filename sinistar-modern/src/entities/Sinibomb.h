@@ -9,7 +9,7 @@
 #define SINIBOMB_H
 
 #include "GameObject.h"
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 /**
  * Sinibomb - player's projectile weapon

@@ -8,7 +8,7 @@
 #define PARTICLE_H
 
 #include "../core/Math.h"
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <vector>
 
 /**

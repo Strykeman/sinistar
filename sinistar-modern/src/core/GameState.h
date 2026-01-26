@@ -8,7 +8,7 @@
 #ifndef GAMESTATE_H
 #define GAMESTATE_H
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <functional>
 #include <string>
 

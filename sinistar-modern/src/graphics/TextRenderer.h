@@ -8,7 +8,7 @@
 #ifndef TEXTRENDERER_H
 #define TEXTRENDERER_H
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <string>
 #include <map>
 #include <vector>

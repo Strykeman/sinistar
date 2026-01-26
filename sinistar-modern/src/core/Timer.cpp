@@ -4,7 +4,7 @@
  * Simple timer utility (placeholder for now)
  */
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 // Placeholder - will be expanded later for game timing utilities
 namespace Timer {

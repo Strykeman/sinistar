@@ -10,7 +10,7 @@
 
 #include "GameObject.h"
 #include "Crystal.h"
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 /**
  * Worker AI states

@@ -8,7 +8,7 @@
 #ifndef COLOR_H
 #define COLOR_H
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <cstdint>
 
 /**

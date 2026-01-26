@@ -8,7 +8,7 @@
 #ifndef INPUTSYSTEM_H
 #define INPUTSYSTEM_H
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <map>
 #include "../core/Math.h"
 

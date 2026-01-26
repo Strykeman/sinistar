@@ -10,7 +10,7 @@
 #ifndef GAMEENGINE_H
 #define GAMEENGINE_H
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <memory>
 #include <string>
 #include <vector>

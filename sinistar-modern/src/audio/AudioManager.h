@@ -8,9 +8,9 @@
 #ifndef AUDIOMANAGER_H
 #define AUDIOMANAGER_H
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #ifdef HAVE_SDL2_MIXER
-#include <SDL2/SDL_mixer.h>
+#include <SDL_mixer.h>
 #endif
 #include <map>
 #include <string>

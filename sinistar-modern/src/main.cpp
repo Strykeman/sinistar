@@ -6,7 +6,7 @@
  * Modern recreation using SDL2
  */
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 #include <iostream>
 #include <memory>
 #include "core/GameEngine.h"
