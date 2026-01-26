@@ -34,9 +34,44 @@ endif()
 #   Windows: Download from https://www.libsdl.org/ or use vcpkg
 find_package(SDL2 REQUIRED)
 
+# On macOS with Homebrew, help CMake find SDL2_mixer
+if(APPLE)
+    # Try to find Homebrew prefix
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+
+    if(HOMEBREW_PREFIX)
+        # Add Homebrew paths for SDL2_mixer
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}/opt/sdl2_mixer")
+        list(APPEND CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}/opt/sdl2_image")
+    endif()
+endif()
+
 # SDL2_mixer and SDL2_image (optional for now, will be required later)
 find_package(SDL2_mixer QUIET)
 find_package(SDL2_image QUIET)
+
+# Fallback: Use pkg-config if CMake find_package fails
+if(NOT SDL2_mixer_FOUND)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(SDL2_MIXER QUIET SDL2_mixer)
+        if(SDL2_MIXER_FOUND)
+            set(SDL2_mixer_FOUND TRUE)
+            # Create imported target for consistency
+            add_library(SDL2_mixer::SDL2_mixer INTERFACE IMPORTED)
+            set_target_properties(SDL2_mixer::SDL2_mixer PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${SDL2_MIXER_INCLUDE_DIRS}"
+                INTERFACE_LINK_LIBRARIES "${SDL2_MIXER_LIBRARIES}"
+                INTERFACE_LINK_DIRECTORIES "${SDL2_MIXER_LIBRARY_DIRS}"
+            )
+        endif()
+    endif()
+endif()
 
 # Source files
 set(CORE_SOURCES
@@ -120,6 +155,11 @@ target_include_directories(Sinistar PRIVATE
     ${SDL2_INCLUDE_DIRS}
 )
 
+# Add SDL2_mixer include directories if found via pkg-config
+if(SDL2_MIXER_FOUND AND SDL2_MIXER_INCLUDE_DIRS)
+    target_include_directories(Sinistar PRIVATE ${SDL2_MIXER_INCLUDE_DIRS})
+endif()
+
 # Link libraries
 target_link_libraries(Sinistar PRIVATE
     SDL2::SDL2
@@ -132,7 +172,15 @@ endif()
 
 # Optional libraries
 if(SDL2_mixer_FOUND)
-    target_link_libraries(Sinistar PRIVATE SDL2_mixer::SDL2_mixer)
+    if(TARGET SDL2_mixer::SDL2_mixer)
+        target_link_libraries(Sinistar PRIVATE SDL2_mixer::SDL2_mixer)
+    elseif(SDL2_MIXER_LIBRARIES)
+        # Using pkg-config variables
+        target_link_libraries(Sinistar PRIVATE ${SDL2_MIXER_LIBRARIES})
+        if(SDL2_MIXER_LIBRARY_DIRS)
+            target_link_directories(Sinistar PRIVATE ${SDL2_MIXER_LIBRARY_DIRS})
+        endif()
+    endif()
     target_compile_definitions(Sinistar PRIVATE HAVE_SDL2_MIXER)
 endif()
 
