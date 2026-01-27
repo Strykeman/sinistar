@@ -6,6 +6,8 @@
 
 #include "Crystal.h"
 #include "../core/Math.h"
+#include "../graphics/SpriteManager.h"
+#include "../graphics/Sprite.h"
 #include <cmath>
 #include <cstdlib>
 
@@ -111,44 +113,88 @@ void Crystal::render(SDL_Renderer* renderer) {
         };
     }
 
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-
-    // Draw octagon (8-sided crystal)
-    const int sides = 8;
-    SDL_Point points[sides + 1];
-
-    for (int i = 0; i <= sides; i++) {
-        float angle = rotation_ + (2.0f * M_PI * i) / sides;
-        float r = radius_ * (0.9f + 0.1f * std::sin(pulseTimer_ + i));
-        points[i].x = static_cast<int>(pos.x + r * std::cos(angle));
-        points[i].y = static_cast<int>(pos.y + r * std::sin(angle));
+    // Determine sprite filename based on size
+    const char* spriteFilename = nullptr;
+    switch (size_) {
+        case Size::SMALL:
+            spriteFilename = "crystal_small.png";
+            break;
+        case Size::MEDIUM:
+            spriteFilename = "crystal_medium.png";
+            break;
+        case Size::LARGE:
+            spriteFilename = "crystal_large.png";
+            break;
     }
 
-    SDL_RenderDrawLines(renderer, points, sides + 1);
+    // Try sprite rendering first
+    SDL_Texture* crystalSprite = SpriteManager::getInstance().getSprite(spriteFilename);
 
-    // Draw inner crystal segments based on size
-    int segments = static_cast<int>(size_) + 1;
-    for (int s = 0; s < segments; s++) {
-        float innerRadius = radius_ * 0.3f + (s * radius_ * 0.2f);
-        SDL_Point innerPoints[sides + 1];
+    if (crystalSprite) {
+        // SPRITE-BASED RENDERING
+        int spriteWidth, spriteHeight;
+        if (SpriteManager::getInstance().getSpriteDimensions(spriteFilename,
+                                                              spriteWidth, spriteHeight)) {
+            // Map rotation angle to frame (6 rotation frames)
+            // Normalize rotation to 0-2π range
+            float normalizedAngle = rotation_;
+            while (normalizedAngle < 0) normalizedAngle += 2.0f * M_PI;
+            while (normalizedAngle >= 2.0f * M_PI) normalizedAngle -= 2.0f * M_PI;
+
+            int frame = static_cast<int>((normalizedAngle / (2.0f * M_PI)) * 6.0f) % 6;
+
+            // Create sprite wrapper (6 frames horizontal)
+            // Small: 96x16 (16x16 per frame)
+            // Medium: 144x24 (24x24 per frame)
+            // Large: 192x32 (32x32 per frame)
+            Sprite sprite(crystalSprite, spriteWidth / 6, spriteHeight, 6);
+
+            // Render with health-based color tinting and pulse effect
+            sprite.renderFrameTinted(renderer, frame, pos.x, pos.y,
+                                    color.r, color.g, color.b, color.a,
+                                    0.0f, 1.0f);  // No rotation needed - frame already rotated
+        }
+    } else {
+        // GEOMETRIC FALLBACK
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+
+        // Draw octagon (8-sided crystal)
+        const int sides = 8;
+        SDL_Point points[sides + 1];
 
         for (int i = 0; i <= sides; i++) {
-            float angle = -rotation_ * 0.5f + (2.0f * M_PI * i) / sides + s * 0.5f;
-            innerPoints[i].x = static_cast<int>(pos.x + innerRadius * std::cos(angle));
-            innerPoints[i].y = static_cast<int>(pos.y + innerRadius * std::sin(angle));
+            float angle = rotation_ + (2.0f * M_PI * i) / sides;
+            float r = radius_ * (0.9f + 0.1f * std::sin(pulseTimer_ + i));
+            points[i].x = static_cast<int>(pos.x + r * std::cos(angle));
+            points[i].y = static_cast<int>(pos.y + r * std::sin(angle));
         }
 
-        SDL_RenderDrawLines(renderer, innerPoints, sides + 1);
-    }
+        SDL_RenderDrawLines(renderer, points, sides + 1);
 
-    // Draw center dot (brighter)
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_Rect centerDot = {
-        static_cast<int>(pos.x - 1),
-        static_cast<int>(pos.y - 1),
-        3, 3
-    };
-    SDL_RenderFillRect(renderer, &centerDot);
+        // Draw inner crystal segments based on size
+        int segments = static_cast<int>(size_) + 1;
+        for (int s = 0; s < segments; s++) {
+            float innerRadius = radius_ * 0.3f + (s * radius_ * 0.2f);
+            SDL_Point innerPoints[sides + 1];
+
+            for (int i = 0; i <= sides; i++) {
+                float angle = -rotation_ * 0.5f + (2.0f * M_PI * i) / sides + s * 0.5f;
+                innerPoints[i].x = static_cast<int>(pos.x + innerRadius * std::cos(angle));
+                innerPoints[i].y = static_cast<int>(pos.y + innerRadius * std::sin(angle));
+            }
+
+            SDL_RenderDrawLines(renderer, innerPoints, sides + 1);
+        }
+
+        // Draw center dot (brighter)
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        SDL_Rect centerDot = {
+            static_cast<int>(pos.x - 1),
+            static_cast<int>(pos.y - 1),
+            3, 3
+        };
+        SDL_RenderFillRect(renderer, &centerDot);
+    }
 }
 
 bool Crystal::takeDamage(float amount) {

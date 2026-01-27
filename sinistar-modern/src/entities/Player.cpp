@@ -9,6 +9,8 @@
 #include "../input/InputSystem.h"
 #include "../systems/PhysicsSystem.h"
 #include "../graphics/Color.h"
+#include "../graphics/SpriteManager.h"
+#include "../graphics/Sprite.h"
 #include <cmath>
 
 Player::Player()
@@ -228,35 +230,63 @@ void Player::updateWeapons(float deltaTime) {
 }
 
 void Player::drawShip(SDL_Renderer* renderer, const Vector2& pos) {
-    // Draw ship as a triangle pointing in rotation direction
-    // Original arcade used a simple triangular ship
+    // Try sprite rendering first
+    SDL_Texture* shipSprite = SpriteManager::getInstance().getSprite("player_ship.png");
 
-    Vector2 forward = getForward();
-    Vector2 right = forward.perpendicular();
+    if (shipSprite) {
+        // SPRITE-BASED RENDERING
+        int spriteWidth, spriteHeight;
+        if (SpriteManager::getInstance().getSpriteDimensions("player_ship.png",
+                                                              spriteWidth, spriteHeight)) {
+            // Determine which frame to use based on thrust state
+            // Frame 0: No thrust
+            // Frames 1-2: Thrust animation (alternating engine glow)
+            int frame = 0;
+            if (thrusting_) {
+                // Alternate between frames 1 and 2 based on thrust timer
+                frame = 1 + (static_cast<int>(thrustTimer_ * 10.0f) % 2);
+            }
 
-    // Ship vertices (triangle)
-    Vector2 nose = pos + forward * shipSize_;
-    Vector2 leftWing = pos - forward * (shipSize_ * 0.5f) - right * (shipSize_ * 0.6f);
-    Vector2 rightWing = pos - forward * (shipSize_ * 0.5f) + right * (shipSize_ * 0.6f);
+            // Create sprite wrapper (3 frames horizontal: 48x16 total, 16x16 per frame)
+            Sprite sprite(shipSprite, spriteWidth / 3, spriteHeight, 3);
 
-    // Draw filled triangle
-    SDL_SetRenderDrawColor(renderer, shipColor_.r, shipColor_.g, shipColor_.b, shipColor_.a);
+            // Render with cyan color tinting, rotation, and scaling
+            sprite.renderFrameTinted(renderer, frame, pos.x, pos.y,
+                                    shipColor_.r, shipColor_.g, shipColor_.b, shipColor_.a,
+                                    rotation_, 1.0f);
+        }
+    } else {
+        // GEOMETRIC FALLBACK
+        // Draw ship as a triangle pointing in rotation direction
+        // Original arcade used a simple triangular ship
 
-    // Draw triangle using lines (SDL doesn't have filled triangle primitive)
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(nose.x), static_cast<int>(nose.y),
-        static_cast<int>(leftWing.x), static_cast<int>(leftWing.y));
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(leftWing.x), static_cast<int>(leftWing.y),
-        static_cast<int>(rightWing.x), static_cast<int>(rightWing.y));
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(rightWing.x), static_cast<int>(rightWing.y),
-        static_cast<int>(nose.x), static_cast<int>(nose.y));
+        Vector2 forward = getForward();
+        Vector2 right = forward.perpendicular();
 
-    // Draw center line for detail
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(pos.x), static_cast<int>(pos.y),
-        static_cast<int>(nose.x), static_cast<int>(nose.y));
+        // Ship vertices (triangle)
+        Vector2 nose = pos + forward * shipSize_;
+        Vector2 leftWing = pos - forward * (shipSize_ * 0.5f) - right * (shipSize_ * 0.6f);
+        Vector2 rightWing = pos - forward * (shipSize_ * 0.5f) + right * (shipSize_ * 0.6f);
+
+        // Draw filled triangle
+        SDL_SetRenderDrawColor(renderer, shipColor_.r, shipColor_.g, shipColor_.b, shipColor_.a);
+
+        // Draw triangle using lines (SDL doesn't have filled triangle primitive)
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(nose.x), static_cast<int>(nose.y),
+            static_cast<int>(leftWing.x), static_cast<int>(leftWing.y));
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(leftWing.x), static_cast<int>(leftWing.y),
+            static_cast<int>(rightWing.x), static_cast<int>(rightWing.y));
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(rightWing.x), static_cast<int>(rightWing.y),
+            static_cast<int>(nose.x), static_cast<int>(nose.y));
+
+        // Draw center line for detail
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(pos.x), static_cast<int>(pos.y),
+            static_cast<int>(nose.x), static_cast<int>(nose.y));
+    }
 }
 
 void Player::drawThrust(SDL_Renderer* renderer, const Vector2& pos) {

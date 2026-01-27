@@ -7,6 +7,8 @@
 #include "Warrior.h"
 #include "../systems/PhysicsSystem.h"
 #include "../graphics/Color.h"
+#include "../graphics/SpriteManager.h"
+#include "../graphics/Sprite.h"
 #include <cmath>
 #include <cstdlib>
 
@@ -71,41 +73,68 @@ void Warrior::update(float deltaTime) {
 void Warrior::render(SDL_Renderer* renderer) {
     Vector2 pos = getPosition();
 
-    // Draw as a diamond shape (rotated square)
-    Vector2 forward = Vector2::fromAngle(rotation_);
-    Vector2 right = forward.perpendicular();
+    // Try sprite rendering first
+    SDL_Texture* warriorSprite = SpriteManager::getInstance().getSprite("warrior.png");
 
-    // Diamond vertices
-    Vector2 nose = pos + forward * size_;
-    Vector2 left = pos + right * size_;
-    Vector2 tail = pos - forward * size_;
-    Vector2 right_wing = pos - right * size_;
+    if (warriorSprite) {
+        // SPRITE-BASED RENDERING
+        int spriteWidth, spriteHeight;
+        if (SpriteManager::getInstance().getSpriteDimensions("warrior.png",
+                                                              spriteWidth, spriteHeight)) {
+            // Map rotation angle to frame (3 rotation frames)
+            // Divide 360 degrees into 3 equal sectors (120 degrees each)
+            float normalizedAngle = rotation_;
+            while (normalizedAngle < 0) normalizedAngle += 2.0f * M_PI;
+            while (normalizedAngle >= 2.0f * M_PI) normalizedAngle -= 2.0f * M_PI;
 
-    // Draw filled diamond
-    SDL_SetRenderDrawColor(renderer, color_.r, color_.g, color_.b, color_.a);
+            int frame = static_cast<int>((normalizedAngle / (2.0f * M_PI)) * 3.0f) % 3;
 
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(nose.x), static_cast<int>(nose.y),
-        static_cast<int>(left.x), static_cast<int>(left.y));
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(left.x), static_cast<int>(left.y),
-        static_cast<int>(tail.x), static_cast<int>(tail.y));
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(tail.x), static_cast<int>(tail.y),
-        static_cast<int>(right_wing.x), static_cast<int>(right_wing.y));
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(right_wing.x), static_cast<int>(right_wing.y),
-        static_cast<int>(nose.x), static_cast<int>(nose.y));
+            // Create sprite wrapper (3 frames horizontal: 36x12 total, 12x12 per frame)
+            Sprite sprite(warriorSprite, spriteWidth / 3, spriteHeight, 3);
 
-    // Draw cross inside for detail
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(nose.x), static_cast<int>(nose.y),
-        static_cast<int>(tail.x), static_cast<int>(tail.y));
-    SDL_RenderDrawLine(renderer,
-        static_cast<int>(left.x), static_cast<int>(left.y),
-        static_cast<int>(right_wing.x), static_cast<int>(right_wing.y));
+            // Render with red/orange color tinting
+            sprite.renderFrameTinted(renderer, frame, pos.x, pos.y,
+                                    color_.r, color_.g, color_.b, color_.a,
+                                    0.0f, 1.0f);  // No rotation needed - frame already rotated
+        }
+    } else {
+        // GEOMETRIC FALLBACK
+        // Draw as a diamond shape (rotated square)
+        Vector2 forward = Vector2::fromAngle(rotation_);
+        Vector2 right = forward.perpendicular();
 
-    // Health bar if damaged
+        // Diamond vertices
+        Vector2 nose = pos + forward * size_;
+        Vector2 left = pos + right * size_;
+        Vector2 tail = pos - forward * size_;
+        Vector2 right_wing = pos - right * size_;
+
+        // Draw filled diamond
+        SDL_SetRenderDrawColor(renderer, color_.r, color_.g, color_.b, color_.a);
+
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(nose.x), static_cast<int>(nose.y),
+            static_cast<int>(left.x), static_cast<int>(left.y));
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(left.x), static_cast<int>(left.y),
+            static_cast<int>(tail.x), static_cast<int>(tail.y));
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(tail.x), static_cast<int>(tail.y),
+            static_cast<int>(right_wing.x), static_cast<int>(right_wing.y));
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(right_wing.x), static_cast<int>(right_wing.y),
+            static_cast<int>(nose.x), static_cast<int>(nose.y));
+
+        // Draw cross inside for detail
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(nose.x), static_cast<int>(nose.y),
+            static_cast<int>(tail.x), static_cast<int>(tail.y));
+        SDL_RenderDrawLine(renderer,
+            static_cast<int>(left.x), static_cast<int>(left.y),
+            static_cast<int>(right_wing.x), static_cast<int>(right_wing.y));
+    }
+
+    // Health bar if damaged (shown regardless of rendering mode)
     if (health_ < maxHealth_) {
         float healthPercent = health_ / maxHealth_;
         int barWidth = static_cast<int>(size_ * 2.0f);

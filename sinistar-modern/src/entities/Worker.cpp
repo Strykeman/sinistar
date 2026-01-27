@@ -7,6 +7,8 @@
 #include "Worker.h"
 #include "../core/Math.h"
 #include "../systems/PhysicsSystem.h"
+#include "../graphics/SpriteManager.h"
+#include "../graphics/Sprite.h"
 #include <cmath>
 #include <cstdlib>
 
@@ -257,42 +259,66 @@ void Worker::render(SDL_Renderer* renderer) {
     color.g = static_cast<Uint8>(color.g * pulse);
     color.b = static_cast<Uint8>(color.b * pulse);
 
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    // Try sprite rendering first
+    SDL_Texture* workerSprite = SpriteManager::getInstance().getSprite("worker.png");
 
-    // Draw hexagon (6-sided worker)
-    const int sides = 6;
-    SDL_Point points[sides + 1];
+    if (workerSprite) {
+        // SPRITE-BASED RENDERING
+        int spriteWidth, spriteHeight;
+        if (SpriteManager::getInstance().getSpriteDimensions("worker.png",
+                                                              spriteWidth, spriteHeight)) {
+            // Determine which frame to use based on carrying state
+            // Frame 0: Empty
+            // Frame 1: Carrying crystal
+            int frame = (carryingCrystal_ > 0.0f) ? 1 : 0;
 
-    for (int i = 0; i <= sides; i++) {
-        float angle = rotation_ + (2.0f * M_PI * i) / sides;
-        points[i].x = static_cast<int>(pos.x + radius_ * std::cos(angle));
-        points[i].y = static_cast<int>(pos.y + radius_ * std::sin(angle));
+            // Create sprite wrapper (2 frames horizontal: 28x14 total, 14x14 per frame)
+            Sprite sprite(workerSprite, spriteWidth / 2, spriteHeight, 2);
+
+            // Render with state-based color tinting and pulse effect
+            sprite.renderFrameTinted(renderer, frame, pos.x, pos.y,
+                                    color.r, color.g, color.b, color.a,
+                                    rotation_, 1.0f);
+        }
+    } else {
+        // GEOMETRIC FALLBACK
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+
+        // Draw hexagon (6-sided worker)
+        const int sides = 6;
+        SDL_Point points[sides + 1];
+
+        for (int i = 0; i <= sides; i++) {
+            float angle = rotation_ + (2.0f * M_PI * i) / sides;
+            points[i].x = static_cast<int>(pos.x + radius_ * std::cos(angle));
+            points[i].y = static_cast<int>(pos.y + radius_ * std::sin(angle));
+        }
+
+        SDL_RenderDrawLines(renderer, points, sides + 1);
+
+        // If carrying crystal, draw indicator
+        if (carryingCrystal_ > 0.0f) {
+            SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+            SDL_Rect crystalIndicator = {
+                static_cast<int>(pos.x - 2),
+                static_cast<int>(pos.y - 2),
+                4, 4
+            };
+            SDL_RenderFillRect(renderer, &crystalIndicator);
+        }
+
+        // Draw direction indicator
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
+        float frontX = pos.x + radius_ * 1.2f * std::cos(rotation_);
+        float frontY = pos.y + radius_ * 1.2f * std::sin(rotation_);
+        SDL_RenderDrawLine(
+            renderer,
+            static_cast<int>(pos.x),
+            static_cast<int>(pos.y),
+            static_cast<int>(frontX),
+            static_cast<int>(frontY)
+        );
     }
-
-    SDL_RenderDrawLines(renderer, points, sides + 1);
-
-    // If carrying crystal, draw indicator
-    if (carryingCrystal_ > 0.0f) {
-        SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-        SDL_Rect crystalIndicator = {
-            static_cast<int>(pos.x - 2),
-            static_cast<int>(pos.y - 2),
-            4, 4
-        };
-        SDL_RenderFillRect(renderer, &crystalIndicator);
-    }
-
-    // Draw direction indicator
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 200);
-    float frontX = pos.x + radius_ * 1.2f * std::cos(rotation_);
-    float frontY = pos.y + radius_ * 1.2f * std::sin(rotation_);
-    SDL_RenderDrawLine(
-        renderer,
-        static_cast<int>(pos.x),
-        static_cast<int>(pos.y),
-        static_cast<int>(frontX),
-        static_cast<int>(frontY)
-    );
 }
 
 bool Worker::takeDamage(float amount) {
