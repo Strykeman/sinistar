@@ -14,6 +14,7 @@
 #include "../graphics/TextRenderer.h"
 #include "../graphics/Particle.h"
 #include "../graphics/Color.h"
+#include "../graphics/SpriteManager.h"
 #include "../audio/AudioManager.h"
 #include "../entities/GameObject.h"
 #include "../entities/Player.h"
@@ -96,6 +97,10 @@ GameEngine::GameEngine(int windowWidth, int windowHeight,
     // Initialize audio system
     AudioManager::getInstance().initialize();
 
+    // Initialize sprite system
+    SpriteManager::getInstance().initialize(renderer_);
+    SpriteManager::getInstance().preloadSprites();
+
     // Setup state callbacks
     stateManager_->setStartGameCallback([this]() { resetGame(); });
     stateManager_->setResumeGameCallback([this]() { /* Resume game */ });
@@ -134,6 +139,7 @@ GameEngine::~GameEngine() {
 
     // Clean up systems
     AudioManager::getInstance().shutdown();
+    SpriteManager::getInstance().shutdown();
     scoreManager_.reset();
     stateManager_.reset();
     particleSystem_.reset();

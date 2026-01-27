@@ -7,6 +7,8 @@
 #include "Sinistar.h"
 #include "../core/Math.h"
 #include "../systems/PhysicsSystem.h"
+#include "../graphics/SpriteManager.h"
+#include "../graphics/Sprite.h"
 #include <cmath>
 #include <cstdlib>
 
@@ -386,7 +388,40 @@ void Sinistar::render(SDL_Renderer* renderer) {
             return;  // Don't render when dead
     }
 
-    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    // Try to use sprite rendering first
+    SDL_Texture* faceSprite = SpriteManager::getInstance().getSprite("sinistar_face.png");
+
+    if (faceSprite) {
+        // Sprite-based rendering
+        int spriteWidth, spriteHeight;
+        if (SpriteManager::getInstance().getSpriteDimensions("sinistar_face.png", spriteWidth, spriteHeight)) {
+            // Calculate which frame to show based on jaw animation
+            int frame = 0;
+            if (state_ == SinistarState::BITING) {
+                // Jaw opening animation (frames 0-3)
+                frame = static_cast<int>((jawAngle_ / 0.8f) * 3);  // jawAngle_ max is 0.8
+                if (frame > 3) frame = 3;
+            } else if (state_ == SinistarState::AWAKENING || pulseTimer_ > 0) {
+                // Eye glow animation (frames 4-5)
+                frame = 4 + (static_cast<int>(pulseTimer_ * 4) % 2);
+            }
+
+            // Create sprite wrapper for rendering
+            Sprite sprite(faceSprite, spriteWidth / 6, spriteHeight, 6);  // 6 frames horizontal
+
+            // Render with color tinting and scaling
+            sprite.renderFrameTinted(
+                renderer,
+                frame,
+                pos.x, pos.y,
+                color.r, color.g, color.b, color.a,
+                rotation_,
+                scale_
+            );
+        }
+    } else {
+        // Fallback: Geometric rendering (existing code)
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 
     // Draw large triangular face (menacing)
     // Top point
@@ -437,14 +472,15 @@ void Sinistar::render(SDL_Renderer* renderer) {
         pos.x + renderRadius * 0.4f, mouthY
     );
 
-    // Lower jaw (opens during bite)
-    SDL_RenderDrawLine(
-        renderer,
-        pos.x - renderRadius * 0.3f, mouthY + jawOffset,
-        pos.x + renderRadius * 0.3f, mouthY + jawOffset
-    );
+        // Lower jaw (opens during bite)
+        SDL_RenderDrawLine(
+            renderer,
+            pos.x - renderRadius * 0.3f, mouthY + jawOffset,
+            pos.x + renderRadius * 0.3f, mouthY + jawOffset
+        );
+    }  // End of geometric fallback
 
-    // Construction progress indicator
+    // Construction progress indicator (shown regardless of rendering mode)
     if (state_ == SinistarState::BUILDING) {
         SDL_SetRenderDrawColor(renderer, 100, 255, 100, 255);
         int barWidth = static_cast<int>(renderRadius * 2 * constructionProgress_);
