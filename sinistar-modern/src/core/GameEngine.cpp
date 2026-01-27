@@ -266,7 +266,7 @@ void GameEngine::update(float deltaTime) {
 
             // Check if player fired a weapon
             if (player_->isActive() && InputSystem::getInstance().isButtonPressed(InputButton::FIRE)) {
-                if (player_->canFire()) {
+                if (player_->fire()) {  // Call fire() which checks canFire() and resets cooldown
                     Sinibomb* bomb = player_->createSinibomb();
                     if (bomb) {
                         projectiles_.push_back(bomb);
